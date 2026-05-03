@@ -908,14 +908,17 @@ export default function App() {
       </header>
 
       <motion.main
-        className="surface-grid relative isolate flex min-h-0 flex-1 flex-col overflow-hidden rounded-br-[calc(var(--radius-card)+34px)] rounded-bl-[calc(var(--radius-card)+34px)] border border-t-0 border-border bg-well/94 px-10 pt-[84px] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-lg md:px-[84px]"
+        className={cn(
+          'surface-grid relative isolate flex min-h-0 flex-col items-start overflow-hidden rounded-br-[calc(var(--radius-card)+34px)] rounded-bl-[calc(var(--radius-card)+34px)] border border-t-0 border-border bg-well/94 px-10 pt-[84px] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-lg md:px-[84px]',
+          phase === 'report' ? 'grow-0' : 'flex-1',
+        )}
         layout
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.section
             key={phase === 'idle' ? 'landing' : phase === 'scanning' ? 'scan' : 'report'}
             layout
-            className="relative z-[1]"
+            className="relative z-[1] w-full"
             initial={{
               opacity: prefersReducedMotion ? 1 : 0,
               y: prefersReducedMotion ? 0 : phase === 'scanning' ? 10 : -8,
