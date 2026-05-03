@@ -10,21 +10,32 @@ import {
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { JSX } from 'react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import type { Finding, Severity } from './lib/mock-report.ts'
-import { buildMockReport } from './lib/mock-report.ts'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { cn } from './lib/cn.ts'
+import type { RiskBand, ScanFinding, ScanReport, Severity } from './lib/scan-types.ts'
 
-/** Replace these with real donation + contact URLs when you publish */
+/** Replace these with your real donation + contact links */
 const CONTACT_EMAIL = 'hello@sitesrift.com'
 const PAYPAL_DONATE_URL = 'https://www.paypal.com/donate/'
 const MAILTO_CONTACT = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Sitesrift full report')}&body=${encodeURIComponent('Hi — here is my URL and donation receipt info:\n\nURL:\nReceipt reference:\n')}`
 
-const SCAN_PHASES = [
-  'Fingerprinting hostname',
-  'Fetching simulated response envelope',
-  'Parsing SEO & preview signals',
-  'Reviewing security headers',
+const LIVE_NARRATION = [
+  {
+    title: 'Opening the page',
+    sub: 'We request the public homepage like a normal visitor, within tight safety limits.',
+  },
+  {
+    title: 'Following redirects safely',
+    sub: 'If the link hops to another address, we stay within a capped chain.',
+  },
+  {
+    title: 'Reading the HTML once',
+    sub: 'We scan titles, previews, headings — one pass, not a whole-site crawl.',
+  },
+  {
+    title: 'Checking protective headers',
+    sub: 'We review security signals exposed on that single response — no login, no guessing passwords.',
+  },
 ] as const
 
 type Phase = 'idle' | 'scanning' | 'report'
@@ -58,9 +69,35 @@ function severityStyles(sev: Severity) {
     case 'warn':
       return 'text-warn border-warn/45 bg-warn-bg ring-1 ring-inset ring-warn/20'
     case 'bad':
-      return 'text-bad border-bad/38 bg-bad-bg ring-1 ring-inset ring-bad/20'
+      return 'text-bad border-bad/38 bg-bad-bg ring-1 ring-inset ring-bad/18'
     default:
       return 'text-muted border-border bg-panel'
+  }
+}
+
+function riskBandStyles(band: RiskBand) {
+  switch (band) {
+    case 'high':
+      return 'border-bad/45 bg-bad-bg text-bad'
+    case 'medium':
+      return 'border-warn/45 bg-warn-bg text-warn'
+    default:
+      return 'border-info/35 bg-info-bg text-info'
+  }
+}
+
+function severityDotColor(sev: Severity) {
+  switch (sev) {
+    case 'good':
+      return 'bg-good shadow-[0_0_0_4px] shadow-good/15'
+    case 'info':
+      return 'bg-info shadow-[0_0_0_4px] shadow-info/14'
+    case 'warn':
+      return 'bg-warn shadow-[0_0_0_4px] shadow-warn/17'
+    case 'bad':
+      return 'bg-bad shadow-[0_0_0_4px] shadow-bad/18'
+    default:
+      return 'bg-muted'
   }
 }
 
@@ -69,10 +106,7 @@ function SeverityDot({ severity }: { severity: Severity }) {
     <span
       className={cn(
         'mr-3 mt-2 inline-flex h-2.5 w-2.5 flex-none shrink-0 rounded-full',
-        severity === 'good' && 'bg-good shadow-[0_0_0_4px] shadow-good/15',
-        severity === 'info' && 'bg-info shadow-[0_0_0_4px] shadow-info/14',
-        severity === 'warn' && 'bg-warn shadow-[0_0_0_4px] shadow-warn/17',
-        severity === 'bad' && 'bg-bad shadow-[0_0_0_4px] shadow-bad/18',
+        severityDotColor(severity),
       )}
       aria-hidden
     />
@@ -118,7 +152,7 @@ function ScoreTile({
   )
 }
 
-function FindingRow({ finding, index }: { finding: Finding; index: number }) {
+function FindingRow({ finding, index }: { finding: ScanFinding; index: number }) {
   const detailId = `${finding.id}-detail`
   return (
     <details
@@ -128,10 +162,10 @@ function FindingRow({ finding, index }: { finding: Finding; index: number }) {
     >
       <summary className="flex cursor-pointer list-none gap-4 px-5 py-[18px] text-left [&::-webkit-details-marker]:hidden focus-visible:[outline:solid] outline-offset-[-2px]">
         <SeverityDot severity={finding.severity} />
-        <div className="min-w-0 flex-1 space-y-1">
+        <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
             <p className="font-mono text-[11px] font-medium uppercase tracking-[0.34em] text-muted">
-              {finding.category}
+              {finding.category} · {finding.lens === 'visibility' ? 'findability' : 'defense'}
             </p>
             <span
               className={cn(
@@ -141,8 +175,17 @@ function FindingRow({ finding, index }: { finding: Finding; index: number }) {
             >
               {finding.severity}
             </span>
+            <span
+              className={cn(
+                'rounded-full border px-2 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em]',
+                riskBandStyles(finding.riskBand),
+              )}
+            >
+              Risk · {finding.riskBand}
+            </span>
           </div>
           <p className="text-base leading-snug text-foreground">{finding.title}</p>
+          <p className="text-sm leading-relaxed text-muted">{finding.riskWhy}</p>
         </div>
         <div className="ml-auto flex-none font-mono text-xs text-accent">
           <span className="opacity-85 transition-colors group-hover:opacity-100 group-open:hidden">+</span>
@@ -151,9 +194,19 @@ function FindingRow({ finding, index }: { finding: Finding; index: number }) {
       </summary>
       <div
         id={detailId}
-        className="border-t border-white/10 px-5 pb-[18px] pt-4 text-[15px] leading-relaxed text-muted"
+        className="space-y-4 border-t border-white/10 px-5 pb-[18px] pt-4 text-left text-[15px] leading-relaxed text-muted"
       >
-        {finding.detail}
+        <p>{finding.detail}</p>
+        <div className="rounded-lg border border-border bg-well/90 px-4 py-3 font-mono text-sm text-foreground">
+          <span className="text-accent">Next step · </span>
+          {finding.remedy}
+        </div>
+        {finding.detailTechnical ? (
+          <details className="rounded-lg border border-dashed border-border bg-black/25 px-4 py-3 font-mono text-xs text-muted">
+            <summary className="cursor-pointer text-accent">Technical detail</summary>
+            <p className="mt-3 whitespace-pre-wrap">{finding.detailTechnical}</p>
+          </details>
+        ) : null}
       </div>
     </details>
   )
@@ -167,7 +220,8 @@ function ScanningPanel({
   prefersReducedMotion: boolean | null
 }) {
   const liveId = useId()
-  const active = SCAN_PHASES[Math.min(stepIndex, SCAN_PHASES.length - 1)] ?? ''
+  const idx = stepIndex % LIVE_NARRATION.length
+  const active = LIVE_NARRATION[idx]
 
   return (
     <motion.div
@@ -181,16 +235,12 @@ function ScanningPanel({
       aria-labelledby={liveId}
     >
       <p id={liveId} className="sr-only">
-        Scanning in progress — current stage {active}.
+        Scan in progress — {active.title}.
       </p>
       <div className="flex items-center gap-4">
         <div className="relative flex size-14 items-center justify-center rounded-2xl border border-accent/40 bg-well">
           <div className="absolute inset-[3px] rounded-[14px] border border-accent/30" aria-hidden />
-          <Loader2
-            className="size-8 text-accent"
-            strokeWidth={1.85}
-            aria-hidden
-          />
+          <Loader2 className="size-8 text-accent" strokeWidth={1.85} aria-hidden />
           <motion.span
             className="pointer-events-none absolute inset-[-10px] rounded-3xl border border-accent/15"
             animate={
@@ -202,18 +252,17 @@ function ScanningPanel({
           />
         </div>
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.42em] text-muted">
-            System status
-          </p>
-          <p className="mt-3 font-mono text-lg tracking-tight text-foreground">{active}</p>
+          <p className="font-mono text-xs uppercase tracking-[0.42em] text-muted">What we are doing</p>
+          <p className="mt-3 font-mono text-lg tracking-tight text-foreground">{active.title}</p>
+          <p className="mt-2 font-sans text-sm leading-relaxed text-muted">{active.sub}</p>
         </div>
       </div>
       <div className="mt-8 grid gap-3">
-        {SCAN_PHASES.map((label, idx) => {
-          const done = idx < stepIndex
-          const current = idx === stepIndex
+        {LIVE_NARRATION.map((step, i) => {
+          const done = i < idx
+          const current = i === idx
           return (
-            <div key={label} className="flex items-center gap-3">
+            <div key={step.title} className="flex items-center gap-3">
               <span
                 className={cn(
                   'flex size-[11px] items-center justify-center rounded-full ring-4 ring-well',
@@ -230,81 +279,73 @@ function ScanningPanel({
               <p
                 className={cn(
                   'flex-1 font-mono text-sm',
-                  idx <= stepIndex ? 'text-foreground' : 'text-muted',
+                  i <= idx ? 'text-foreground' : 'text-muted',
                 )}
               >
-                {label}
+                {step.title}
               </p>
             </div>
           )
         })}
       </div>
       <p className="mt-8 rounded-lg border border-dashed border-border bg-well/85 px-4 py-3 font-mono text-xs leading-snug text-muted">
-        Heads up: this sprint is illustrative only — deterministic mock output until the Phase B ingest service ships.
+        We only fetch what is needed for this readout — no aggressive crawling, no password guessing.
       </p>
     </motion.div>
   )
 }
 
+const riskWeight = (b: RiskBand) => (b === 'high' ? 3 : b === 'medium' ? 2 : 1)
+
 export default function App() {
   const prefersReducedMotion = useReducedMotion()
   const headerRef = useRef<HTMLElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [draftUrl, setDraftUrl] = useState('')
   const [submissionError, setSubmissionError] = useState<string | null>(null)
 
-  const [scanUrlUsed, setScanUrlUsed] = useState<string | null>(null)
   const [scanPhaseIndex, setScanPhaseIndex] = useState(0)
-  const [report, setReport] = useState<ReturnType<typeof buildMockReport> | null>(null)
+  const [report, setReport] = useState<ScanReport | null>(null)
 
   const heroCopy = useMemo(
     () => ({
       eyebrow: 'Sitesrift inspector',
       title: 'Point. Scan. Read the fracture lines.',
       sub:
-        'An opinionated fusion of crawl-time SEO scaffolding and surfaced security posture — packaged like a cockpit, not another boring audit PDF.',
+        'Fast SEO hygiene plus plain-English security posture — what searchers see, what browsers enforce — without a PDF lecture.',
       legal:
-        'For now this build is deterministic mock data keyed by what you typed. Reach out once you approve the UX and well wire hardened scans.',
+        'We open your public page once and read the signals we can see from the outside. Results are guidance, not a guarantee.',
     }),
     [],
   )
 
   useEffect(() => {
     if (phase !== 'scanning') return
+    const tick = prefersReducedMotion ? 2200 : 1600
+    const id = window.setInterval(() => {
+      setScanPhaseIndex((v) => (v + 1) % LIVE_NARRATION.length)
+    }, tick)
+    return () => clearInterval(id)
+  }, [phase, prefersReducedMotion])
 
-    let cancelled = false
-    const stepDelayMs = prefersReducedMotion ? 40 : 720
-    const finishPadMs = prefersReducedMotion ? 120 : 920
-    const timers: ReturnType<typeof setTimeout>[] = []
-
-    SCAN_PHASES.forEach((_, idx) => {
-      timers.push(
-        window.setTimeout(() => {
-          if (!cancelled) setScanPhaseIndex(idx)
-        }, idx * stepDelayMs),
-      )
-    })
-
-    const finishDelay = SCAN_PHASES.length * stepDelayMs + finishPadMs
-    timers.push(
-      window.setTimeout(() => {
-        if (cancelled) return
-        const next = scanUrlUsed ? buildMockReport(scanUrlUsed) : buildMockReport('demo.local')
-        setReport(next)
-        setPhase('report')
-      }, finishDelay),
-    )
-
-    return () => {
-      cancelled = true
-      for (const timer of timers) clearTimeout(timer)
-    }
-  }, [phase, prefersReducedMotion, scanUrlUsed])
-
-  const handleInspect = () => {
+  const resetSession = useCallback(() => {
+    abortRef.current?.abort()
+    abortRef.current = null
+    setDraftUrl('')
+    setPhase('idle')
+    setReport(null)
     setSubmissionError(null)
-    headerRef.current?.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' })
+    setScanPhaseIndex(0)
+  }, [])
+
+  const handleInspect = async () => {
+    setSubmissionError(null)
+    headerRef.current?.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    })
 
     const normalized = normalizeUrlCandidate(draftUrl)
     if (!normalized.ok) {
@@ -312,11 +353,49 @@ export default function App() {
       return
     }
 
-    setScanUrlUsed(normalized.url)
+    abortRef.current?.abort()
+    const ac = new AbortController()
+    abortRef.current = ac
+
     setScanPhaseIndex(0)
     setReport(null)
     setPhase('scanning')
+
+    try {
+      const res = await fetch('/api/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: normalized.url }),
+        signal: ac.signal,
+      })
+
+      const data = (await res.json()) as ScanReport & { error?: string }
+
+      if (!res.ok) {
+        setSubmissionError(
+          typeof data.error === 'string' ? data.error : 'That scan could not finish — try another URL.',
+        )
+        setPhase('idle')
+        return
+      }
+
+      setReport(data)
+      setPhase('report')
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
+      if (e instanceof Error && e.name === 'AbortError') return
+      setSubmissionError('Network hiccup — check your connection and try again.')
+      setPhase('idle')
+    }
   }
+
+  const topRisks = useMemo(() => {
+    if (!report) return []
+    return [...report.findings]
+      .filter((f) => f.severity !== 'good')
+      .sort((a, b) => riskWeight(b.riskBand) - riskWeight(a.riskBand))
+      .slice(0, 3)
+  }, [report])
 
   let body: JSX.Element | null
 
@@ -337,19 +416,31 @@ export default function App() {
       >
         <div className="flex flex-col gap-4 border-b border-border pb-10 md:flex-row md:items-end md:justify-between">
           <div className="max-w-3xl space-y-4">
-            <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">
-              Session bundle
-            </p>
+            <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">Scan snapshot</p>
             <h2 className="text-balance font-sans text-3xl tracking-tight text-foreground md:text-4xl">
-              Console-grade readout derived from illustrative extraction.
+              Outside-in readout from one homepage fetch — SEO hints plus visible browser protections.
             </h2>
-            <p className="font-mono text-sm leading-relaxed text-accent/90">{report.canonicalUrl}</p>
+            <p className="font-mono text-sm leading-relaxed text-accent/90">
+              Typed · {report.canonicalUrl}
+            </p>
+            <p className="font-mono text-sm leading-relaxed text-muted">
+              Landed on · {report.meta.finalUrl}
+            </p>
             <div className="flex flex-wrap gap-3 pt-4">
               <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
                 Response <span className="text-foreground">{report.meta.statusCode}</span>
               </div>
               <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
-                Plane <span className="capitalize text-foreground">{report.meta.serverBanner}</span>
+                Redirect hops{' '}
+                <span className="text-foreground">{report.meta.redirectCount}</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
+                Content-Type{' '}
+                <span className="break-all text-foreground">{report.meta.contentType}</span>
+              </div>
+              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
+                Edge server{' '}
+                <span className="capitalize text-foreground">{report.meta.serverBanner}</span>
               </div>
               <div className="inline-flex flex-1 min-w-[min(440px,calc(100%-1rem))] items-center rounded-lg border border-border bg-well px-4 py-3 font-mono text-xs leading-relaxed text-muted">
                 {report.meta.tlsNote}
@@ -358,14 +449,7 @@ export default function App() {
           </div>
           <motion.button
             type="button"
-            onClick={() => {
-              setDraftUrl('')
-              setPhase('idle')
-              setReport(null)
-              setScanUrlUsed(null)
-              setSubmissionError(null)
-              setScanPhaseIndex(0)
-            }}
+            onClick={resetSession}
             className="mt-8 inline-flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-panel px-6 py-[14px] font-mono text-sm text-foreground transition hover:border-accent hover:text-accent md:mt-0 md:w-auto"
             whileHover={prefersReducedMotion ? undefined : { y: -1 }}
             transition={{ duration: 0.2 }}
@@ -375,17 +459,34 @@ export default function App() {
           </motion.button>
         </div>
 
+        {topRisks.length > 0 ? (
+          <div className="mt-10 rounded-[var(--radius-card)] border border-border bg-well/90 px-6 py-6 md:px-8">
+            <p className="font-mono text-xs uppercase tracking-[0.42em] text-muted">Top risks to eyeball</p>
+            <ul className="mt-4 grid gap-3 md:grid-cols-3">
+              {topRisks.map((f) => (
+                <li key={f.id} className="rounded-xl border border-border bg-panel px-4 py-4">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted">
+                    Risk · {f.riskBand}
+                  </p>
+                  <p className="mt-2 text-sm font-medium text-foreground">{f.title}</p>
+                  <p className="mt-2 text-xs leading-relaxed text-muted">{f.riskWhy}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="mt-10 grid gap-5 md:grid-cols-[minmax(0,420px)_1fr]">
           <ScoreTile
             title="SEO posture"
             value={report.seoScore}
-            subtitle="Simulated coherence of meta, canonical, previews, headings."
+            subtitle="Based on titles, previews, canonical hints, mobile viewport — not keyword rankings."
             prefersReducedMotion={prefersReducedMotion}
           />
           <ScoreTile
             title="Security posture"
             value={report.securityScore}
-            subtitle="Hypothesized stance on HTTPS, CSP, framing, referrer policy."
+            subtitle="Based on HTTPS signals and headers we could read from one response — not penetration testing."
             prefersReducedMotion={prefersReducedMotion}
           />
         </div>
@@ -397,11 +498,7 @@ export default function App() {
                 {bucket === 'seo' ? (
                   <Gauge className="size-7 text-accent" strokeWidth={1.7} aria-hidden />
                 ) : (
-                  <MousePointerSquareDashed
-                    className="size-7 text-accent"
-                    strokeWidth={1.7}
-                    aria-hidden
-                  />
+                  <MousePointerSquareDashed className="size-7 text-accent" strokeWidth={1.7} aria-hidden />
                 )}
                 <h3 className="font-sans text-2xl tracking-tight text-foreground capitalize">
                   {bucket} findings
@@ -410,6 +507,7 @@ export default function App() {
               <div className="flex flex-col gap-3">
                 {report.findings
                   .filter((f) => f.category === bucket)
+                  .sort((a, b) => riskWeight(b.riskBand) - riskWeight(a.riskBand))
                   .map((finding, index) => (
                     <FindingRow key={finding.id} finding={finding} index={index} />
                   ))}
@@ -424,22 +522,20 @@ export default function App() {
 
           <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1.08fr)_minmax(260px,0.75fr)]">
             <div>
-              <p className="font-mono text-xs uppercase tracking-[0.44em] text-muted">
-                Full analyst packet
-              </p>
+              <p className="font-mono text-xs uppercase tracking-[0.44em] text-muted">Full analyst packet</p>
               <h3 className="mt-6 text-balance text-3xl font-medium tracking-tight text-foreground">
-                Locked behind human coordination — not autopilot checkout.
+                Want hands-on help after this snapshot?
               </h3>
               <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted">
-                Donate whatever feels fair via PayPal, then ping us through email with receipt + URLs.
-                We manually assemble remediation-grade notes for teams that prefer operator-level depth.
+                Donate via PayPal if you want to support deeper work, then email us with your URL and receipt
+                note. We coordinate manually — no instant PDF wizard here yet.
               </p>
               <ul className="mt-8 grid gap-3 font-mono text-sm text-muted">
                 <li className="rounded-lg border border-border bg-well/95 px-4 py-3">
-                  <span className="text-accent">01</span> · PayPal support keeps things transparent.
+                  <span className="text-accent">01</span> · PayPal keeps the trail simple.
                 </li>
                 <li className="rounded-lg border border-border bg-well/95 px-4 py-3">
-                  <span className="text-accent">02</span> · Email thread aligns scope + SLA expectations.
+                  <span className="text-accent">02</span> · Email us so expectations stay human.
                 </li>
               </ul>
             </div>
@@ -449,9 +545,7 @@ export default function App() {
                   <div className="flex items-start gap-3">
                     <Lock className="mt-1 size-6 text-accent/90" strokeWidth={1.7} aria-hidden />
                     <div>
-                      <p className="font-mono text-xs uppercase tracking-[0.36em] text-muted">
-                        Teaser corpus
-                      </p>
+                      <p className="font-mono text-xs uppercase tracking-[0.36em] text-muted">Teaser corpus</p>
                       <p className="mt-5 space-y-2 font-mono text-xs leading-relaxed text-muted blur-[10px]">
                         Remediation packet · Header diff playbook · Canonical graph · SSRF sniff tests ·
                         Posture regressions checklist · Appendix for engineering handoff...
@@ -487,7 +581,7 @@ export default function App() {
         </div>
 
         <p className="mt-10 pb-8 text-center font-mono text-xs text-muted">
-          Demo mode — illustrative scores + findings keyed off your typed URL · not authoritative security telemetry.
+          Educational snapshot — not legal or pentesting advice. Always validate critical issues with your team.
         </p>
       </motion.section>
     )
@@ -500,9 +594,7 @@ export default function App() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: prefersReducedMotion ? 0 : 0.55, ease: [0.16, 1, 0.3, 1] }}
         >
-          <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">
-            {heroCopy.eyebrow}
-          </p>
+          <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">{heroCopy.eyebrow}</p>
           <h2 className="mt-10 text-pretty bg-gradient-to-b from-foreground via-foreground/90 to-muted bg-clip-text font-sans text-4xl font-medium tracking-tight text-transparent md:text-[3.06rem] md:leading-[1.06] md:tracking-tight">
             {heroCopy.title}
           </h2>
@@ -511,7 +603,7 @@ export default function App() {
           </p>
           <div className="mt-14 flex flex-wrap justify-center gap-4">
             <div className="inline-flex rounded-full border border-border bg-well/95 px-4 py-[9px] font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              Live mock · SSRF ingest later
+              Live scan · single-page pass
             </div>
           </div>
         </motion.div>
@@ -542,7 +634,7 @@ export default function App() {
                     setDraftUrl(evt.target.value)
                   }}
                   onKeyDown={(evt) => {
-                    if (evt.key === 'Enter') handleInspect()
+                    if (evt.key === 'Enter') void handleInspect()
                   }}
                   autoComplete="url"
                   className="w-full rounded-none bg-transparent px-2 py-[6px] text-inherit caret-accent outline-none ring-0 focus:ring-0"
@@ -552,7 +644,7 @@ export default function App() {
               <motion.button
                 type="button"
                 disabled={draftUrl.trim() === ''}
-                onClick={handleInspect}
+                onClick={() => void handleInspect()}
                 className={cn(
                   'inline-flex shrink-0 items-center justify-center gap-[10px]',
                   'rounded-2xl border border-accent-strong bg-accent px-10 py-[21px]',
@@ -579,13 +671,13 @@ export default function App() {
                 </motion.p>
               ) : (
                 <p className="relative px-[34px] pb-[30px] text-center font-mono text-[11px] leading-relaxed text-muted md:px-[58px]">
-                  HTTPS assumed when you omit the scheme · We never scrape here — all mock choreography for now ·{' '}
+                  HTTPS assumed when you omit the scheme · We fetch one public page — no stealth crawling ·{' '}
                   <button
                     type="button"
                     className="text-accent underline underline-offset-4 hover:text-accent-strong"
-                    onClick={() => setDraftUrl('https://sitesrift.app')}
+                    onClick={() => setDraftUrl('https://example.com')}
                   >
-                    Try Sitesrift staging
+                    Try example.com
                   </button>
                   .
                   <span className="mt-6 block">{heroCopy.legal}</span>
@@ -599,7 +691,7 @@ export default function App() {
   }
 
   const statusLabel =
-    phase === 'idle' ? 'Ready' : phase === 'scanning' ? 'Analyzing envelope' : 'Report compiled'
+    phase === 'idle' ? 'Ready' : phase === 'scanning' ? 'Scanning' : 'Report ready'
 
   return (
     <div className="relative mx-auto flex min-h-[100svh] w-[min(1180px,100%)] flex-col px-6 pb-[52px] text-center md:px-10">
@@ -607,24 +699,22 @@ export default function App() {
         <div className="h-full rounded-[420px] bg-[radial-gradient(circle,rgba(34,211,238,0.12),transparent_73%)]" />
       </div>
 
-      <header
-        ref={headerRef}
-        className="sticky top-6 z-[9] isolate mb-[-10px]"
-      >
+      <header ref={headerRef} className="sticky top-6 z-[9] isolate mb-[-10px]">
         <div className="flex items-center gap-6 rounded-[20px] border border-border-strong bg-well/93 px-[22px] py-[17px] font-mono text-xs uppercase tracking-[0.56em] text-muted shadow-[0_20px_60px_-30px_black] backdrop-blur-3xl backdrop-saturate-150">
           <div className="flex items-center gap-3 text-accent">
             <span className="relative flex size-2.5">
               <span className="absolute inline-flex size-full animate-pulse rounded-full bg-accent opacity-95" />
               <span className="relative inline-flex size-2.5 rounded-full border border-accent/60 bg-well" />
             </span>
-            Demo
+            Beta
           </div>
           <div className="hidden h-[18px] w-px shrink-0 bg-border md:inline-block" />
           <span className="truncate text-muted">
             inspector <span className="text-accent/90">{statusLabel}</span>
           </span>
           <div className="ml-auto hidden items-center gap-3 font-mono text-[10px] normal-case tracking-[0.06em] text-muted md:flex">
-            <Gauge strokeWidth={1.6} className="size-4 shrink-0 text-accent" aria-hidden /> SEO / surface security
+            <Gauge strokeWidth={1.6} className="size-4 shrink-0 text-accent" aria-hidden /> SEO / surface
+            security
           </div>
         </div>
       </header>
@@ -660,14 +750,22 @@ export default function App() {
         </AnimatePresence>
 
         {!prefersReducedMotion ? (
-          <motion.div className="pointer-events-none absolute left-[-8%] top-[30%]" aria-hidden animate={{ opacity: [0.18, 0.35, 0.19] }} transition={{ repeat: Infinity, duration: 7 }}>
-            <span className="block h-[150px] w-[150px] rounded-full blur-[118px]" style={{ backgroundColor: '#22d3ee', opacity: 0.06 }} />
+          <motion.div
+            className="pointer-events-none absolute left-[-8%] top-[30%]"
+            aria-hidden
+            animate={{ opacity: [0.18, 0.35, 0.19] }}
+            transition={{ repeat: Infinity, duration: 7 }}
+          >
+            <span
+              className="block h-[150px] w-[150px] rounded-full blur-[118px]"
+              style={{ backgroundColor: '#22d3ee', opacity: 0.06 }}
+            />
           </motion.div>
         ) : null}
       </motion.main>
 
       <p className="relative z-[4] px-10 pt-9 text-[11px] font-mono uppercase tracking-[0.38em] text-muted">
-        © {new Date().getFullYear()} Sitesrift · illustrative tech preview
+        © {new Date().getFullYear()} Sitesrift · outside-in snapshot
       </p>
     </div>
   )

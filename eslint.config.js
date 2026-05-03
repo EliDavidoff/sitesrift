@@ -8,7 +8,15 @@ import { defineConfig, globalIgnores } from 'eslint/config'
 export default defineConfig([
   globalIgnores(['dist']),
   {
+    files: ['scan-api/**/*.ts', 'vite-plugin-scan-api.ts'],
+    extends: [js.configs.recommended, tseslint.configs.recommended],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
     files: ['**/*.{ts,tsx}'],
+    ignores: ['scan-api/**', 'vite-plugin-scan-api.ts'],
     extends: [
       js.configs.recommended,
       tseslint.configs.recommended,
