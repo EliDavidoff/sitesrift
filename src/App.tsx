@@ -442,6 +442,35 @@ export default function InspectorApp() {
     [],
   )
 
+  const landingHeroContainerVariants = useMemo(
+    () => ({
+      hidden: {},
+      visible: prefersReducedMotion
+        ? {}
+        : {
+            transition: {
+              staggerChildren: 0.09,
+              delayChildren: 0.05,
+            },
+          },
+    }),
+    [prefersReducedMotion],
+  )
+
+  const landingHeroItemVariants = useMemo(
+    () => ({
+      hidden: prefersReducedMotion ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 },
+      visible: prefersReducedMotion
+        ? { opacity: 1, y: 0 }
+        : {
+            opacity: 1,
+            y: 0,
+            transition: { duration: 0.52, ease: [0.16, 1, 0.3, 1] as const },
+          },
+    }),
+    [prefersReducedMotion],
+  )
+
   useEffect(() => {
     if (phase !== 'scanning') return
     if (scanProgressMode !== 'timer') return
@@ -794,40 +823,85 @@ export default function InspectorApp() {
       <>
         <motion.div
           className="mx-auto mt-[72px] flex w-full max-w-4xl flex-col items-center text-center"
-          initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: prefersReducedMotion ? 0 : 0.55, ease: [0.16, 1, 0.3, 1] }}
+          variants={landingHeroContainerVariants}
+          initial="hidden"
+          animate="visible"
         >
-          <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">{heroCopy.eyebrow}</p>
-          <h2 className="mt-10 w-full text-pretty bg-gradient-to-b from-foreground via-foreground/90 to-muted bg-clip-text font-sans text-4xl font-medium tracking-tight text-transparent md:text-[3.06rem] md:leading-[1.06] md:tracking-tight">
+          <motion.p
+            variants={landingHeroItemVariants}
+            className="font-mono text-xs uppercase tracking-[0.46em] text-muted"
+          >
+            {heroCopy.eyebrow}
+          </motion.p>
+          <motion.h2
+            variants={landingHeroItemVariants}
+            className="mt-10 w-full text-pretty bg-gradient-to-b from-foreground via-foreground/90 to-muted bg-clip-text font-sans text-4xl font-medium tracking-tight text-transparent md:text-[3.06rem] md:leading-[1.06] md:tracking-tight"
+          >
             {heroCopy.title}
-          </h2>
-          <p className="mt-8 w-full max-w-2xl text-pretty font-sans text-lg leading-snug text-muted md:text-xl">
+          </motion.h2>
+          <motion.p
+            variants={landingHeroItemVariants}
+            className="mt-8 w-full max-w-2xl text-pretty font-sans text-lg leading-snug text-muted md:text-xl"
+          >
             {heroCopy.sub}
-          </p>
-          <div className="mt-14 flex flex-wrap justify-center gap-4">
+          </motion.p>
+          <motion.div
+            variants={landingHeroItemVariants}
+            className="mt-14 flex flex-wrap justify-center gap-4"
+          >
             <div className="inline-flex rounded-full border border-border bg-well/95 px-4 py-[9px] font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
               Live scan · 4-stage pipeline · HTML + robots.txt
             </div>
-          </div>
+          </motion.div>
         </motion.div>
 
         <motion.div
           className="relative mx-auto mt-[56px] w-full max-w-3xl"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: prefersReducedMotion ? 0 : 0.15, duration: prefersReducedMotion ? 0 : 0.52 }}
+          initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{
+            delay: prefersReducedMotion ? 0 : 0.22,
+            duration: prefersReducedMotion ? 0 : 0.5,
+            ease: [0.16, 1, 0.3, 1],
+          }}
         >
           <label className="sr-only" htmlFor="url-bar">
             URL to inspect
           </label>
-          <div className="group relative isolate overflow-hidden rounded-[22px] border border-accent/55 bg-well/92 p-[14px] shadow-glow-accent">
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_52%_-20%,rgba(34,211,238,0.22),transparent_61%)]" />
+          <motion.div
+            className="group relative isolate overflow-hidden rounded-[22px] border border-accent/55 bg-well/92 p-[14px] shadow-glow-accent"
+            whileHover={prefersReducedMotion ? undefined : { scale: 1.004, y: -1 }}
+            whileTap={prefersReducedMotion ? undefined : { scale: 0.998 }}
+            transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+          >
+            <div className="pointer-events-none absolute inset-0 animate-inspector-glow bg-[radial-gradient(circle_at_52%_-20%,rgba(34,211,238,0.22),transparent_61%)] will-change-transform" />
             <div className="pointer-events-none absolute inset-0 noise-soft opacity-80" />
 
             <div className="relative grid grid-cols-1 gap-4 px-6 py-10 md:grid-cols-[minmax(0,1fr)_auto] md:gap-8 md:p-14">
-              <div className="flex h-14 min-w-0 items-center rounded-2xl border border-border-strong bg-black/52 px-[18px] font-mono text-base text-foreground shadow-inner shadow-black/60 md:h-[4.5rem] md:text-lg md:tracking-tight">
-                <ShieldCheck aria-hidden size={26} strokeWidth={1.6} className="mr-5 shrink-0 text-accent md:mr-6" />
+              <div className="inspector-url-focus flex h-14 min-w-0 items-center rounded-2xl border border-border-strong bg-black/52 px-[18px] font-mono text-base text-foreground shadow-inner shadow-black/60 md:h-[4.5rem] md:text-lg md:tracking-tight">
+                <motion.span
+                  className="mr-5 inline-flex shrink-0 text-accent md:mr-6"
+                  aria-hidden
+                  animate={
+                    prefersReducedMotion || draftUrl.trim() !== ''
+                      ? { scale: 1, opacity: 1 }
+                      : {
+                          scale: [1, 1.06, 1],
+                          opacity: [0.9, 1, 0.9],
+                        }
+                  }
+                  transition={
+                    prefersReducedMotion || draftUrl.trim() !== ''
+                      ? { duration: 0.2 }
+                      : {
+                          duration: 2.7,
+                          repeat: Infinity,
+                          ease: 'easeInOut',
+                        }
+                  }
+                >
+                  <ShieldCheck aria-hidden size={26} strokeWidth={1.6} />
+                </motion.span>
                 <input
                   id="url-bar"
                   value={draftUrl}
@@ -849,6 +923,17 @@ export default function InspectorApp() {
                 type="button"
                 disabled={draftUrl.trim() === ''}
                 onClick={() => void handleInspect()}
+                animate={
+                  prefersReducedMotion
+                    ? undefined
+                    : {
+                        filter:
+                          draftUrl.trim() !== ''
+                            ? 'brightness(1.06) saturate(1.06)'
+                            : 'brightness(1) saturate(1)',
+                      }
+                }
+                transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
                 className={cn(
                   'flex h-14 w-full items-center justify-center gap-[10px]',
                   'md:h-[4.5rem] md:w-auto md:min-w-[12rem] md:px-10',
@@ -856,8 +941,8 @@ export default function InspectorApp() {
                   'font-mono text-sm font-semibold leading-none tracking-[0.14em] text-canvas uppercase',
                   'shadow-[0_0_62px_-20px_rgb(34,211,238)] disabled:opacity-45 disabled:grayscale',
                 )}
-                whileHover={prefersReducedMotion ? undefined : { scale: 1.01 }}
-                whileTap={prefersReducedMotion ? undefined : { scale: 0.986 }}
+                whileHover={prefersReducedMotion ? undefined : { scale: 1.025 }}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.985 }}
               >
                 Run scan <ArrowRight size={21} aria-hidden strokeWidth={1.7} />
               </motion.button>
@@ -890,7 +975,7 @@ export default function InspectorApp() {
                 </p>
               )}
             </AnimatePresence>
-          </div>
+          </motion.div>
         </motion.div>
       </>
     )

@@ -118,3 +118,41 @@
   );
   mix-blend-mode: soft-light;
 }
+
+/* Softer ambient motion for the inspector callout — global reduce-motion rules shorten this appropriately. */
+@keyframes inspector-glow-shift {
+  0% {
+    opacity: 0.22;
+    transform: translate(-3%, -2%) scale(1);
+  }
+  50% {
+    opacity: 0.42;
+    transform: translate(2%, 4%) scale(1.06);
+  }
+  100% {
+    opacity: 0.22;
+    transform: translate(-3%, -2%) scale(1);
+  }
+}
+
+.animate-inspector-glow {
+  animation: inspector-glow-shift 14s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-inspector-glow {
+    animation: none;
+  }
+}
+
+.inspector-url-focus {
+  @apply transition-[border-color,box-shadow,color] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)];
+}
+
+.inspector-url-focus:focus-within {
+  border-color: rgb(34 211 238 / 0.52);
+  box-shadow:
+    inset 0 0 40px rgb(34 211 238 / 0.06),
+    0 0 0 1px rgb(34 211 238 / 0.18),
+    0 0 32px rgb(34 211 238 / 0.12);
+}
