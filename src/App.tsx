@@ -13,6 +13,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { JSX } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { ScanMetaChip } from './components/ScanMetaChip.tsx'
 import { ScanSnapshotHero } from './components/ScanSnapshotHero.tsx'
 import { cn } from './lib/cn.ts'
 import { deductionsList } from './lib/score-breakdown.ts'
@@ -595,29 +596,44 @@ export default function App() {
               Landed on · {report.meta.finalUrl}
             </p>
             <div className="flex flex-wrap gap-3 pt-4">
-              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
+              <ScanMetaChip
+                helpLabel="HTTP response status"
+                hint="HTTP status from our single GET to this URL after following redirects up to the scanner’s limit. For example, 200 means the server returned a response successfully."
+              >
                 Response <span className="text-foreground">{report.meta.statusCode}</span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
-                Redirect hops{' '}
-                <span className="text-foreground">{report.meta.redirectCount}</span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
-                Content-Type{' '}
-                <span className="break-all text-foreground">{report.meta.contentType}</span>
-              </div>
-              <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
-                Edge server{' '}
-                <span className="capitalize text-foreground">{report.meta.serverBanner}</span>
-              </div>
-              <div className="inline-flex flex-1 min-w-[min(440px,calc(100%-1rem))] items-center rounded-lg border border-border bg-well px-4 py-3 font-mono text-xs leading-relaxed text-muted">
+              </ScanMetaChip>
+              <ScanMetaChip
+                helpLabel="Redirect hops"
+                hint="How many HTTP redirects we followed before reaching the final URL in this report. Fewer hops usually mean a simpler landing URL."
+              >
+                Redirect hops <span className="text-foreground">{report.meta.redirectCount}</span>
+              </ScanMetaChip>
+              <ScanMetaChip
+                helpLabel="Content-Type header"
+                hint="MIME type declared for the response body we analyzed. This snapshot expects HTML; other types may limit what we could inspect."
+              >
+                Content-Type <span className="break-all text-foreground">{report.meta.contentType}</span>
+              </ScanMetaChip>
+              <ScanMetaChip
+                helpLabel="Server header"
+                hint="A rough signal from the Server response header when the origin sends one—often a CDN or stack hint, not a complete infrastructure inventory."
+              >
+                Edge server <span className="capitalize text-foreground">{report.meta.serverBanner}</span>
+              </ScanMetaChip>
+              <ScanMetaChip
+                variant="stretch"
+                helpLabel="HTTPS observation"
+                hint="Summarizes what we could observe about HTTPS on this pass from headers and transport—not a full certificate audit or penetration test."
+              >
                 {report.meta.tlsNote}
-              </div>
+              </ScanMetaChip>
               {report.meta.scanDurationMs != null ? (
-                <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
-                  Server pass{' '}
-                  <span className="tabular-nums text-foreground">{report.meta.scanDurationMs}</span> ms
-                </div>
+                <ScanMetaChip
+                  helpLabel="Server timing"
+                  hint="Wall-clock time for the server to complete this scan (milliseconds), when the API reports it."
+                >
+                  Server pass <span className="tabular-nums text-foreground">{report.meta.scanDurationMs}</span> ms
+                </ScanMetaChip>
               ) : null}
             </div>
           </div>
