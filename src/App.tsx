@@ -13,6 +13,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { JSX } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { AnimatedUrlHint } from './components/AnimatedUrlHint.tsx'
 import { ScanMetaChip } from './components/ScanMetaChip.tsx'
 import { SiteFooter } from './components/SiteFooter.tsx'
 import { ScanSnapshotHero } from './components/ScanSnapshotHero.tsx'
@@ -423,6 +424,7 @@ export default function InspectorApp() {
 
   const [phase, setPhase] = useState<Phase>('idle')
   const [draftUrl, setDraftUrl] = useState('')
+  const [urlBarFocused, setUrlBarFocused] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
 
   const [scanPhaseIndex, setScanPhaseIndex] = useState(0)
@@ -819,6 +821,9 @@ export default function InspectorApp() {
       </motion.section>
     )
   } else {
+    const showAnimatedUrlHint =
+      phase === 'idle' && draftUrl.trim() === '' && !urlBarFocused
+
     body = (
       <>
         <motion.div
@@ -883,7 +888,7 @@ export default function InspectorApp() {
                   className="mr-5 inline-flex shrink-0 text-accent md:mr-6"
                   aria-hidden
                   animate={
-                    prefersReducedMotion || draftUrl.trim() !== ''
+                    prefersReducedMotion || draftUrl.trim() !== '' || urlBarFocused
                       ? { scale: 1, opacity: 1 }
                       : {
                           scale: [1, 1.06, 1],
@@ -891,7 +896,7 @@ export default function InspectorApp() {
                         }
                   }
                   transition={
-                    prefersReducedMotion || draftUrl.trim() !== ''
+                    prefersReducedMotion || draftUrl.trim() !== '' || urlBarFocused
                       ? { duration: 0.2 }
                       : {
                           duration: 2.7,
@@ -902,21 +907,36 @@ export default function InspectorApp() {
                 >
                   <ShieldCheck aria-hidden size={26} strokeWidth={1.6} />
                 </motion.span>
-                <input
-                  id="url-bar"
-                  value={draftUrl}
-                  spellCheck={false}
-                  placeholder="stripe.com/blog"
-                  onChange={(evt) => {
-                    setSubmissionError(null)
-                    setDraftUrl(evt.target.value)
-                  }}
-                  onKeyDown={(evt) => {
-                    if (evt.key === 'Enter') void handleInspect()
-                  }}
-                  autoComplete="url"
-                  className="min-h-0 min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 py-0 text-base leading-normal text-inherit caret-accent outline-none ring-0 focus:ring-0"
-                />
+                <div className="relative min-w-0 flex-1">
+                  {showAnimatedUrlHint ? (
+                    <AnimatedUrlHint
+                      reducedMotion={!!prefersReducedMotion}
+                      className="pointer-events-none absolute inset-y-0 left-2 right-2 flex items-center overflow-hidden text-left font-mono text-base leading-normal text-muted/55 md:text-lg"
+                    />
+                  ) : null}
+                  <input
+                    id="url-bar"
+                    value={draftUrl}
+                    spellCheck={false}
+                    placeholder={showAnimatedUrlHint ? '' : 'stripe.com/blog'}
+                    onChange={(evt) => {
+                      setSubmissionError(null)
+                      setDraftUrl(evt.target.value)
+                    }}
+                    onFocus={() => setUrlBarFocused(true)}
+                    onBlur={() => setUrlBarFocused(false)}
+                    onKeyDown={(evt) => {
+                      if (evt.key === 'Enter') void handleInspect()
+                    }}
+                    autoComplete="url"
+                    className={cn(
+                      'relative z-[1] min-h-0 w-full rounded-none border-0 bg-transparent px-2 py-0 text-base leading-normal outline-none ring-0 focus:ring-0',
+                      showAnimatedUrlHint
+                        ? 'text-transparent caret-transparent'
+                        : 'text-inherit caret-accent',
+                    )}
+                  />
+                </div>
               </div>
 
               <motion.button
