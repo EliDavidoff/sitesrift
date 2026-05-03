@@ -18,8 +18,8 @@ export function PrivacyPage() {
           1. Operator
         </h2>
         <p>
-          This policy describes how <strong className="text-foreground">{LEGAL.entity}</strong> (“we”, “us”) handles
-          information in connection with Sitesrift. Questions:{' '}
+          This policy describes how <strong className="text-foreground">{LEGAL.operatorName}</strong>, operating as{' '}
+          {LEGAL.operatorCapacity}, handles information in connection with this website and the scan tool. Questions:{' '}
           <a
             className="text-accent underline underline-offset-4 hover:text-accent-strong"
             href={`mailto:${LEGAL.contactEmail}?subject=${encodeURIComponent('Privacy question')}`}
@@ -35,9 +35,14 @@ export function PrivacyPage() {
           2. What you send us
         </h2>
         <p>
-          When you run a scan, your browser sends a request that includes the <strong className="text-foreground">URL</strong>{' '}
-          you entered so our server can perform the snapshot. We use that string only to operate the Service — not to
-          sell personal profiles from URLs alone.
+          When you run a scan, your browser sends an HTTP <strong className="text-foreground">POST</strong> to our API with
+          a small JSON body (for example{' '}
+          <code className="rounded bg-panel px-1.5 py-0.5 font-mono text-[13px] text-accent">
+            {`{ "url": "https://example.com/path" }`}
+          </code>
+          ). The URL string is processed only to operate the snapshot. Request bodies above a modest size limit are
+          rejected at the boundary to limit abuse — we do not use URLs alone to build personal profiles or sell identity
+          data.
         </p>
       </section>
 
@@ -47,15 +52,21 @@ export function PrivacyPage() {
         </h2>
         <ul className="list-inside list-disc space-y-2 pl-1 marker:text-accent">
           <li>
-            <strong className="text-foreground">Client IP address</strong> may be seen by our hosting stack and is used
-            for <strong className="text-foreground">abuse prevention</strong> (for example rate limiting repeated scan
-            requests).
+            <strong className="text-foreground">Client IP address</strong> is visible to our hosting/API layer and used
+            for <strong className="text-foreground">abuse prevention</strong>. In typical bundled deployments today, heavy
+            repeat scanning from the same address may hit a throttle on the order of{' '}
+            <strong className="text-foreground">~45 scan requests per IP per sliding minute</strong> — tuning may differ
+            in production; contact us if you need enterprise limits.
           </li>
           <li>
-            In development / preview environments, minimal <strong className="text-foreground">console logs</strong>{' '}
-            may record scan outcomes using the <strong className="text-foreground">hostname</strong> derived from your
-            URL — not the full URL string — to avoid dumping query-heavy URLs into logs. Production logging behavior may
-            evolve; we will update this policy if it materially changes.
+            Each scan runs under a server-side timeout (on the order of tens of seconds) so stalled targets do not hold
+            workers open indefinitely.
+          </li>
+          <li>
+            In development-style environments, lightweight <strong className="text-foreground">console logs</strong> may
+            record scan outcomes with the <strong className="text-foreground">hostname</strong> derived from your URL —
+            not the full URL — to reduce accidental logging of sensitive query strings. Production logging posture may
+            evolve; substantive changes belong in an updated revision date on this page.
           </li>
         </ul>
       </section>
@@ -66,8 +77,8 @@ export function PrivacyPage() {
         </h2>
         <p>
           The Sitesrift front-end <strong className="text-foreground">does not set analytics cookies</strong> in the
-          current codebase. If we add measurement later, we will update this policy and, where required, your consent
-          flows.
+          shipped codebase today. If we add measurement later, we will refresh this policy and add consent flows where the
+          law requires them.
         </p>
       </section>
 
@@ -76,8 +87,8 @@ export function PrivacyPage() {
           5. Third-party services
         </h2>
         <p>
-          Links may open third-party sites (for example donation pages or email). Those services have their own
-          policies; we do not control what they collect when you leave Sitesrift.
+          Links may open third-party sites (for example donation or email handlers). Those services have their own
+          policies; we do not control what they collect once you leave our origin.
         </p>
       </section>
 
@@ -86,9 +97,10 @@ export function PrivacyPage() {
           6. Retention
         </h2>
         <p>
-          Retention depends on deployment. Development logs are ephemeral console output. Production retention should be
-          documented here once hosting choices are final — <strong className="text-foreground">update this paragraph</strong>{' '}
-          with counsel.
+          We do not market a persisted “history of everyone’s scans” in the default product footprint: scan results render
+          in your session. Operational logs depend on hosting — ephemeral console telemetry in preview, and configurable
+          retention wherever you deploy (access logs, WAF trails, vendor dashboards). Align production retention with your
+          own compliance posture and document it if you fork or self-host publicly.
         </p>
       </section>
 
@@ -97,8 +109,10 @@ export function PrivacyPage() {
           7. Your rights
         </h2>
         <p>
-          Depending on where you live, you may have rights to access, correct, delete, or restrict processing of personal
-          data. Email us at the address above. We will respond within a reasonable time and may need to verify requests.
+          Depending on jurisdiction, you may have rights regarding access, correction, deletion, or restriction of data
+          that identifies you — including IP-derived records where applicable law treats them as personal data. Email us at
+          the address above with a concise request; we will respond within a reasonable timeframe and may need to verify
+          identity for sensitive actions.
         </p>
       </section>
 
@@ -107,18 +121,26 @@ export function PrivacyPage() {
           8. International users
         </h2>
         <p>
-          If you access the Service from outside the country where servers operate, your information may be processed
-          where infrastructure runs. Cross-border transfers should be described precisely with counsel for your setup.
+          If you use the Service from outside the geography where servers run, transmissions and any logs may cross
+          borders. Detailed transfer mechanisms belong in a counsel-reviewed addendum matched to how you operate in
+          production.
         </p>
       </section>
 
       <section className="space-y-3" aria-labelledby="p9">
         <h2 id="p9" className="font-sans text-lg font-medium text-foreground">
-          9. Children
+          9. Governing framework
+        </h2>
+        <p>{LEGAL.governingLaw}</p>
+      </section>
+
+      <section className="space-y-3" aria-labelledby="p10">
+        <h2 id="p10" className="font-sans text-lg font-medium text-foreground">
+          10. Children
         </h2>
         <p>
-          The Service is not directed at children under 13 (or the minimum age in your jurisdiction). Do not use it if
-          you are below that age.
+          The Service is not directed at children under 13 (or the minimum digital consent age where you reside). Please
+          do not use it if you are younger than that threshold.
         </p>
       </section>
     </article>

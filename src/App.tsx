@@ -221,6 +221,10 @@ function ScoreHowItWorks({ report }: { report: ScanReport }) {
       </summary>
       <div className="mt-6 space-y-6 font-mono text-sm leading-relaxed text-muted">
         <p>
+          We never crawl every page on a domain—only bounded requests that power this readout—so percentages reflect what
+          surfaced in those passes, not a sitewide audit.
+        </p>
+        <p>
           Each pillar starts at <span className="text-foreground">100</span>. We subtract points for findings that are{' '}
           <strong className="font-semibold text-foreground">not</strong> marked{' '}
           <span className="text-good">good</span> — a checklist from what we observed, not a verdict from Google or any
@@ -434,7 +438,7 @@ export default function InspectorApp() {
 
   const heroCopy = useMemo(
     () => ({
-      eyebrow: 'Sitesrift inspector',
+      eyebrow: 'Single-page URL inspector',
       title: 'Point. Scan. Read the fracture lines.',
       sub:
         'A technical SEO and website security inspector for any public URL—titles, previews, canonicals, robots.txt, HTTPS headers, and structured data from a single page fetch. Clear checklists, not PDF bundles or gimmicky AI ranking claims.',
@@ -540,10 +544,18 @@ export default function InspectorApp() {
       })
 
       if (!res.ok) {
-        const errJson = (await res.json().catch(() => ({}))) as { error?: string }
-        setSubmissionError(
-          typeof errJson.error === 'string' ? errJson.error : 'That scan could not finish — try another URL.',
-        )
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
+        let message = typeof errJson.error === 'string' ? errJson.error : ''
+        if (!message) {
+          if (res.status === 429 || errJson.code === 'rate_limited')
+            message = 'Too many scans from this network — pause a minute or switch networks.'
+          else if (res.status >= 500)
+            message = 'The scanner service had an internal error — try again in a moment.'
+          else if (res.status === 413)
+            message = 'Request payload was refused — shorten the pasted URL.'
+          else message = 'That scan could not finish — try another URL or check your connection.'
+        }
+        setSubmissionError(message)
         setPhase('idle')
         return
       }
@@ -580,7 +592,11 @@ export default function InspectorApp() {
     } catch (e) {
       if (e instanceof DOMException && e.name === 'AbortError') return
       if (e instanceof Error && e.name === 'AbortError') return
-      setSubmissionError('Network hiccup — check your connection and try again.')
+      const fallback =
+        e instanceof TypeError
+          ? 'Could not reach the scanner (offline gateway or blocked request). Retry when you’re on a working network.'
+          : 'Something interrupted the scan before a response arrived — retry once.'
+      setSubmissionError(fallback)
       setPhase('idle')
     }
   }
@@ -698,7 +714,14 @@ export default function InspectorApp() {
           </div>
         ) : null}
 
-        <div className="mt-10 grid gap-5 md:grid-cols-3">
+        <div className="mt-10 space-y-4">
+          <p className="max-w-3xl font-mono text-xs leading-relaxed text-muted md:text-[13px]">
+            <span className="font-semibold text-foreground">Snapshot method:</span> one routed HTML fetch plus a{' '}
+            <span className="text-foreground">robots.txt</span> probe on that host—not a crawler, not lab pentesting. Pillars below
+            are <span className="text-foreground">heuristic checklist scores</span>; treat big gaps as hypotheses to verify with
+            your stack, not contractual grades.
+          </p>
+          <div className="grid gap-5 md:grid-cols-3">
           <ScoreTile
             title="SEO posture"
             value={report.seoScore}
@@ -717,6 +740,7 @@ export default function InspectorApp() {
             subtitle="Heuristic checklist: robots.txt path rules + JSON-LD we saw — not a prediction of chat mentions."
             prefersReducedMotion={prefersReducedMotion}
           />
+          </div>
         </div>
 
         <ScoreHowItWorks report={report} />

@@ -18,15 +18,15 @@ export function TermsPage() {
           1. Who we are
         </h2>
         <p>
-          These Terms govern your use of the Sitesrift web experience (the “Service”) operated by{' '}
-          <strong className="text-foreground">{LEGAL.entity}</strong>. Contact:{' '}
+          These Terms govern use of the Sitesrift web experience (the “Service”) offered by{' '}
+          <strong className="text-foreground">{LEGAL.operatorName}</strong>, {LEGAL.operatorCapacity} Contact:{' '}
           <a
             className="text-accent underline underline-offset-4 hover:text-accent-strong"
             href={`mailto:${LEGAL.contactEmail}`}
           >
             {LEGAL.contactEmail}
           </a>
-          . This page is a practical draft — have counsel align it with your entity and jurisdiction.
+          . Have counsel reconcile this draft with your final entity facts before relying on it in regulated contexts.
         </p>
       </section>
 
@@ -36,12 +36,17 @@ export function TermsPage() {
         </h2>
         <p>
           Sitesrift provides an <strong className="text-foreground">outside-in snapshot</strong> of a{' '}
-          <strong className="text-foreground">public URL</strong> you choose: a bounded fetch of HTML and related
-          signals (such as robots rules as implemented). Outputs include heuristic scores and explanatory copy —{' '}
+          <strong className="text-foreground">public URL</strong> you choose. In typical operation that means constrained
+          fetches across the stages described in-product (for example: normalize the URL; fetch HTML with redirect caps and
+          a server timeout; read <code className="font-mono text-[13px] text-accent">robots.txt</code> expectations on the
+          same host envelope; derive heuristic checklist scores).
+        </p>
+        <p>
+          Outputs are explanatory summaries —{' '}
           <strong className="text-foreground">
-            not a guarantee of rankings, security clearance, or AI visibility
+            not guarantees of rankings, security clearance certificates, penetration testing verdicts, or AI visibility.
           </strong>
-          , and not penetration testing or legal advice.
+          They are based on signals visible from bounded requests, not a whole-site crawl and not legal advice.
         </p>
       </section>
 
@@ -50,14 +55,18 @@ export function TermsPage() {
           3. Acceptable use
         </h2>
         <ul className="list-inside list-disc space-y-2 pl-1 marker:text-accent">
-          <li>Use the Service only for URLs you are authorized to test and that comply with applicable law.</li>
+          <li>Use the Service only for URLs you are authorized to test and under applicable law.</li>
           <li>
-            Do not misuse scans to harass, overload third-party infrastructure, or probe networks outside what the
-            Service explicitly performs.
+            Do not misuse scans to harass people, brute-force infrastructures, bypass authentication, run denial-of-wallet
+            tests, or map networks beyond what the Service explicitly exposes.
           </li>
           <li>
-            Respect robots directives and site policies where applicable; we still fetch minimal public resources as
-            described in our Privacy Policy.
+            Automated or bursty scanning may encounter rate limiting tied to originating IP addresses and request sizes at
+            the API boundary — abuse prevention reserves we describe at a high level in the Privacy Policy.
+          </li>
+          <li>
+            Respect robots directives and site policies; we still retrieve minimal public resources needed to populate the
+            readout described in-product.
           </li>
         </ul>
       </section>
@@ -68,8 +77,8 @@ export function TermsPage() {
         </h2>
         <p>
           The Service is provided <strong className="text-foreground">“as is”</strong>. To the fullest extent permitted
-          by law, we disclaim warranties of merchantability, fitness for a particular purpose, and non-infringement.
-          Snapshots may be incomplete or stale the moment after they run.
+          by applicable law, we disclaim implied warranties including merchantability, fitness for a particular purpose, and
+          non-infringement. Outputs may lag reality the moment after they compute.
         </p>
       </section>
 
@@ -78,10 +87,12 @@ export function TermsPage() {
           5. Limitation of liability
         </h2>
         <p>
-          To the maximum extent permitted by law, <strong className="text-foreground">{LEGAL.entity}</strong> and its
-          contributors will not be liable for indirect, incidental, special, consequential, or punitive damages, or for
-          any loss of profits or data, arising from your use of the Service. Cap and carve-outs depend on your
-          jurisdiction — <strong className="text-foreground">have counsel tune this section</strong>.
+          To the maximum extent permitted by law,{' '}
+          <strong className="text-foreground">{LEGAL.operatorName}</strong>, its successors, licensors, contributors, and
+          volunteers are not liable for indirect, incidental, special, consequential, or punitive damages, or for lost
+          profits or data, arising from your use of the Service. Mandatory consumer rights where you live survive only to
+          the extent they cannot validly be waived — <strong className="text-foreground">have counsel tune caps and carve-outs</strong>{' '}
+          after entity formation.
         </p>
       </section>
 
@@ -90,18 +101,16 @@ export function TermsPage() {
           6. Changes
         </h2>
         <p>
-          We may update these Terms; material changes belong on this page with an updated date. Continued use after
-          changes constitutes acceptance where allowed by law.
+          We may revise these Terms. Material edits appear on this route with an updated “Last updated” stamp. Continued use
+          where law permits may constitute renewed assent once any required notice deadlines pass.
         </p>
       </section>
 
       <section className="space-y-3" aria-labelledby="s7">
         <h2 id="s7" className="font-sans text-lg font-medium text-foreground">
-          7. Governing law
+          7. Governing framework
         </h2>
-        <p>
-          <strong className="text-foreground">{LEGAL.governingLaw}</strong>
-        </p>
+        <p>{LEGAL.governingLaw}</p>
       </section>
     </article>
   )

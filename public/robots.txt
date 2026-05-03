@@ -1,0 +1,3 @@
+# Sitesrift — allow crawling; add canonical Sitemap line after production origin is final.
+User-agent: *
+Allow: /
