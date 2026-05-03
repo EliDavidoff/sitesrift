@@ -14,6 +14,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { JSX } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ScanMetaChip } from './components/ScanMetaChip.tsx'
+import { SiteFooter } from './components/SiteFooter.tsx'
 import { ScanSnapshotHero } from './components/ScanSnapshotHero.tsx'
 import { cn } from './lib/cn.ts'
 import { deductionsList } from './lib/score-breakdown.ts'
@@ -414,7 +415,7 @@ function ScanningPanel({
 
 const riskWeight = (b: RiskBand) => (b === 'high' ? 3 : b === 'medium' ? 2 : 1)
 
-export default function App() {
+export default function InspectorApp() {
   const prefersReducedMotion = useReducedMotion()
   const headerRef = useRef<HTMLElement>(null)
   const reportRef = useRef<HTMLElement | null>(null)
@@ -978,9 +979,7 @@ export default function App() {
         ) : null}
       </motion.main>
 
-      <p className="relative z-[4] px-10 pt-9 text-[11px] font-mono uppercase tracking-[0.38em] text-muted">
-        © {new Date().getFullYear()} Sitesrift · outside-in snapshot
-      </p>
+      <SiteFooter className="relative z-[4]" />
     </div>
   )
 }

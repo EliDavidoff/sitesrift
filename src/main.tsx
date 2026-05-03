@@ -1,10 +1,43 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
-import App from './App.tsx'
+import InspectorApp from './App.tsx'
+import { AccessibilityPage } from './pages/AccessibilityPage.tsx'
+import { LegalLayout } from './pages/LegalLayout.tsx'
+import { PrivacyPage } from './pages/PrivacyPage.tsx'
+import { TermsPage } from './pages/TermsPage.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<InspectorApp />} />
+        <Route
+          path="/terms"
+          element={
+            <LegalLayout>
+              <TermsPage />
+            </LegalLayout>
+          }
+        />
+        <Route
+          path="/privacy"
+          element={
+            <LegalLayout>
+              <PrivacyPage />
+            </LegalLayout>
+          }
+        />
+        <Route
+          path="/accessibility"
+          element={
+            <LegalLayout>
+              <AccessibilityPage />
+            </LegalLayout>
+          }
+        />
+      </Routes>
+    </BrowserRouter>
   </StrictMode>,
 )
