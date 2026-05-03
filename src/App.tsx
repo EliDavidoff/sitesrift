@@ -13,6 +13,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { JSX } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { AnimatedUrlHint } from './components/AnimatedUrlHint.tsx'
 import { ScanMetaChip } from './components/ScanMetaChip.tsx'
 import { SiteFooter } from './components/SiteFooter.tsx'
@@ -24,11 +25,10 @@ import { DEDUCTION_BY_BAND } from './lib/scoring-rubric.ts'
 import { buildScanSnapshotModel } from './lib/scan-summary.ts'
 import { scanStageIndex } from './lib/scan-stages.ts'
 import type { RiskBand, RiskLens, ScanFinding, ScanReport, Severity } from './lib/scan-types.ts'
+import { LEGAL } from './legal/placeholders.ts'
 
-/** Replace these with your real donation + contact links */
-const CONTACT_EMAIL = 'hello@sitesrift.com'
 const PAYPAL_DONATE_URL = 'https://www.paypal.com/donate/'
-const MAILTO_CONTACT = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Sitesrift full report')}&body=${encodeURIComponent('Hi — here is my URL and donation receipt info:\n\nURL:\nReceipt reference:\n')}`
+const MAILTO_CONTACT = `mailto:${LEGAL.contactEmail}?subject=${encodeURIComponent('Sitesrift full report')}&body=${encodeURIComponent('Hi — here is my URL and donation receipt info:\n\nURL:\nReceipt reference:\n')}`
 
 /** Lines up with server scan-stage stream order (see scan-stages.ts) */
 const LIVE_NARRATION = [
@@ -422,6 +422,7 @@ const riskWeight = (b: RiskBand) => (b === 'high' ? 3 : b === 'medium' ? 2 : 1)
 
 export default function InspectorApp() {
   const prefersReducedMotion = useReducedMotion()
+  const policyConsentId = useId()
   const headerRef = useRef<HTMLElement>(null)
   const reportRef = useRef<HTMLElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -430,6 +431,8 @@ export default function InspectorApp() {
   const [draftUrl, setDraftUrl] = useState('')
   const [urlBarFocused, setUrlBarFocused] = useState(false)
   const [submissionError, setSubmissionError] = useState<string | null>(null)
+  /** Acknowledgement before POST /api/scan — intentionally not persisted (each fresh flow / reset requires re-check). */
+  const [scanPoliciesAccepted, setScanPoliciesAccepted] = useState(false)
 
   const [scanPhaseIndex, setScanPhaseIndex] = useState(0)
   /** `server` = NDJSON stage events drive the checklist; `timer` = rotate narration while waiting */
@@ -507,6 +510,7 @@ export default function InspectorApp() {
     setSubmissionError(null)
     setScanPhaseIndex(0)
     setScanProgressMode('timer')
+    setScanPoliciesAccepted(false)
   }, [])
 
   const handleInspect = async () => {
@@ -515,6 +519,11 @@ export default function InspectorApp() {
       behavior: prefersReducedMotion ? 'auto' : 'smooth',
       block: 'start',
     })
+
+    if (!scanPoliciesAccepted) {
+      setSubmissionError('Agree to the Terms and Privacy Policy before running a scan.')
+      return
+    }
 
     const normalized = normalizeUrlCandidate(draftUrl)
     if (!normalized.ok) {
@@ -834,7 +843,7 @@ export default function InspectorApp() {
                   href={MAILTO_CONTACT}
                   className="inline-flex items-center justify-center gap-3 rounded-xl border border-border bg-panel px-8 py-[15px] font-mono text-sm text-foreground transition hover:border-accent hover:text-accent"
                 >
-                  Email {CONTACT_EMAIL}
+                  Email {LEGAL.contactEmail}
                   <Mail aria-hidden size={17} strokeWidth={1.7} />
                 </a>
               </div>
@@ -969,7 +978,7 @@ export default function InspectorApp() {
 
               <motion.button
                 type="button"
-                disabled={draftUrl.trim() === ''}
+                disabled={draftUrl.trim() === '' || !scanPoliciesAccepted}
                 onClick={() => void handleInspect()}
                 animate={
                   prefersReducedMotion
@@ -994,6 +1003,53 @@ export default function InspectorApp() {
               >
                 Run scan <ArrowRight size={21} aria-hidden strokeWidth={1.7} />
               </motion.button>
+            </div>
+
+            <div className="relative mt-6 w-full max-w-xl px-[18px] md:px-10">
+              <label
+                htmlFor={policyConsentId}
+                className="flex cursor-pointer items-start gap-3 text-left font-mono text-xs leading-snug text-muted md:text-[13px]"
+              >
+                <input
+                  id={policyConsentId}
+                  type="checkbox"
+                  checked={scanPoliciesAccepted}
+                  onChange={(e) => {
+                    setScanPoliciesAccepted(e.target.checked)
+                    if (
+                      submissionError?.includes(
+                        'Agree to the Terms and Privacy Policy before running a scan.',
+                      )
+                    ) {
+                      setSubmissionError(null)
+                    }
+                  }}
+                  className={cn(
+                    'mt-[3px] size-4 shrink-0 rounded border-border bg-well accent-accent ring-offset-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2',
+                  )}
+                />
+                <span>
+                  I agree to the{' '}
+                  <Link
+                    className="text-accent underline underline-offset-4 hover:text-accent-strong"
+                    to="/terms"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    Terms
+                  </Link>{' '}
+                  and{' '}
+                  <Link
+                    className="text-accent underline underline-offset-4 hover:text-accent-strong"
+                    to="/privacy"
+                    target="_blank"
+                    rel="noreferrer noopener"
+                  >
+                    Privacy Policy
+                  </Link>
+                  . Beginning a scan uses our service under those policies.
+                </span>
+              </label>
             </div>
 
             <AnimatePresence>

@@ -44,6 +44,12 @@ export function PrivacyPage() {
           rejected at the boundary to limit abuse — we do not use URLs alone to build personal profiles or sell identity
           data.
         </p>
+        <p>
+          The scan control asks you to <strong className="text-foreground">confirm</strong> you have reviewed the Terms of
+          Service and this Privacy Policy. That acknowledgment is enforced in the UI for each scan flow{' '}
+          <strong className="text-foreground">without storing a cookie</strong> or local-storage flag — if you reload the
+          page or start again from “New scan,” you confirm again before the next POST.
+        </p>
       </section>
 
       <section className="space-y-3" aria-labelledby="p3">
@@ -86,8 +92,9 @@ export function PrivacyPage() {
         </h2>
         <p>
           The Sitesrift front-end <strong className="text-foreground">does not set analytics cookies</strong> in the
-          shipped codebase today. If we add measurement later, we will refresh this policy and add consent flows where the
-          law requires them.
+          shipped codebase today — including no cookie/localStorage persistence for Terms/Privacy confirmation; that
+          choice is enforced per session/UI state only as described above. If we add measurement later, we will refresh this
+          policy and add consent flows where the law requires them.
         </p>
       </section>
 

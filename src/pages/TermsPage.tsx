@@ -49,6 +49,12 @@ export function TermsPage() {
           </strong>
           They are based on signals visible from bounded requests, not a whole-site crawl and not legal advice.
         </p>
+        <p>
+          Before initiating a scan, the interface asks you to <strong className="text-foreground">affirmatively confirm</strong>{' '}
+          awareness of these Terms and the Privacy Policy. That checkbox is enforced for each qualifying scan workflow and
+          is <strong className="text-foreground">not stored</strong> in cookies or browser storage beyond the ordinary
+          memory of your open tab or session until you reload or restart the flow from “New scan.”
+        </p>
       </section>
 
       <section className="space-y-3" aria-labelledby="s3">
