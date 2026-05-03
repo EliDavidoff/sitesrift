@@ -13,10 +13,12 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { JSX } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import { ScanSnapshotHero } from './components/ScanSnapshotHero.tsx'
 import { cn } from './lib/cn.ts'
 import { deductionsList } from './lib/score-breakdown.ts'
 import { parseScanNdjsonStream } from './lib/scan-ndjson.ts'
 import { DEDUCTION_BY_BAND } from './lib/scoring-rubric.ts'
+import { buildScanSnapshotModel } from './lib/scan-summary.ts'
 import { scanStageIndex } from './lib/scan-stages.ts'
 import type { RiskBand, RiskLens, ScanFinding, ScanReport, Severity } from './lib/scan-types.ts'
 
@@ -558,6 +560,11 @@ export default function App() {
       .slice(0, 3)
   }, [report])
 
+  const snapshotModel = useMemo(
+    () => (report ? buildScanSnapshotModel(report) : null),
+    [report],
+  )
+
   let body: JSX.Element | null
 
   if (phase === 'scanning') {
@@ -576,13 +583,11 @@ export default function App() {
           ease: [0.16, 1, 0.3, 1],
         }}
       >
-        <div className="flex flex-col gap-4 border-b border-border pb-10 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4 border-b border-border pb-10 md:flex-row md:items-start md:justify-between">
           <div className="max-w-3xl space-y-4">
-            <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">Scan snapshot</p>
-            <h2 className="text-balance font-sans text-3xl tracking-tight text-foreground md:text-4xl">
-              Outside-in readout: one HTML response, robots.txt on the same host, then SEO, security, and
-              assistant-readiness heuristics — not a chat-mention forecast.
-            </h2>
+            {snapshotModel ? (
+              <ScanSnapshotHero model={snapshotModel} prefersReducedMotion={prefersReducedMotion} />
+            ) : null}
             <p className="font-mono text-sm leading-relaxed text-accent/90">
               Typed · {report.canonicalUrl}
             </p>
@@ -670,7 +675,7 @@ export default function App() {
 
         <div className="mt-12 grid gap-10 xl:grid-cols-3">
           {(['seo', 'security', 'ai'] as const).map((bucket) => (
-            <div key={bucket} className="space-y-4">
+            <div key={bucket} id={`findings-${bucket}`} className="scroll-mt-24 space-y-4">
               <div className="flex items-center gap-3">
                 {bucket === 'seo' ? (
                   <Gauge className="size-7 text-accent" strokeWidth={1.7} aria-hidden />
