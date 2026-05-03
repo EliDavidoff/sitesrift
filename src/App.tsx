@@ -793,16 +793,16 @@ export default function InspectorApp() {
     body = (
       <>
         <motion.div
-          className="mx-auto mt-[72px] w-full max-w-4xl"
+          className="mx-auto mt-[72px] flex w-full max-w-4xl flex-col items-center text-center"
           initial={prefersReducedMotion ? false : { opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: prefersReducedMotion ? 0 : 0.55, ease: [0.16, 1, 0.3, 1] }}
         >
           <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">{heroCopy.eyebrow}</p>
-          <h2 className="mt-10 text-pretty bg-gradient-to-b from-foreground via-foreground/90 to-muted bg-clip-text font-sans text-4xl font-medium tracking-tight text-transparent md:text-[3.06rem] md:leading-[1.06] md:tracking-tight">
+          <h2 className="mt-10 w-full text-pretty bg-gradient-to-b from-foreground via-foreground/90 to-muted bg-clip-text font-sans text-4xl font-medium tracking-tight text-transparent md:text-[3.06rem] md:leading-[1.06] md:tracking-tight">
             {heroCopy.title}
           </h2>
-          <p className="mt-8 max-w-2xl text-pretty font-sans text-lg leading-snug text-muted md:text-xl">
+          <p className="mt-8 w-full max-w-2xl text-pretty font-sans text-lg leading-snug text-muted md:text-xl">
             {heroCopy.sub}
           </p>
           <div className="mt-14 flex flex-wrap justify-center gap-4">
@@ -825,9 +825,9 @@ export default function InspectorApp() {
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_52%_-20%,rgba(34,211,238,0.22),transparent_61%)]" />
             <div className="pointer-events-none absolute inset-0 noise-soft opacity-80" />
 
-            <div className="relative flex flex-col gap-4 px-6 py-10 md:flex-row md:items-stretch md:gap-8 md:p-14">
-              <div className="flex flex-1 items-center rounded-2xl border border-border-strong bg-black/52 px-[18px] py-[18px] font-mono text-base text-foreground shadow-inner shadow-black/60 md:text-lg md:tracking-tight">
-                <ShieldCheck aria-hidden size={26} strokeWidth={1.6} className="mr-6 text-accent" />
+            <div className="relative grid grid-cols-1 gap-4 px-6 py-10 md:grid-cols-[minmax(0,1fr)_auto] md:gap-8 md:p-14">
+              <div className="flex h-14 min-w-0 items-center rounded-2xl border border-border-strong bg-black/52 px-[18px] font-mono text-base text-foreground shadow-inner shadow-black/60 md:h-[4.5rem] md:text-lg md:tracking-tight">
+                <ShieldCheck aria-hidden size={26} strokeWidth={1.6} className="mr-5 shrink-0 text-accent md:mr-6" />
                 <input
                   id="url-bar"
                   value={draftUrl}
@@ -841,7 +841,7 @@ export default function InspectorApp() {
                     if (evt.key === 'Enter') void handleInspect()
                   }}
                   autoComplete="url"
-                  className="w-full rounded-none bg-transparent px-2 py-[6px] text-inherit caret-accent outline-none ring-0 focus:ring-0"
+                  className="min-h-0 min-w-0 flex-1 rounded-none border-0 bg-transparent px-2 py-0 text-base leading-normal text-inherit caret-accent outline-none ring-0 focus:ring-0"
                 />
               </div>
 
@@ -850,12 +850,13 @@ export default function InspectorApp() {
                 disabled={draftUrl.trim() === ''}
                 onClick={() => void handleInspect()}
                 className={cn(
-                  'inline-flex shrink-0 items-center justify-center gap-[10px]',
-                  'rounded-2xl border border-accent-strong bg-accent px-10 py-[21px]',
-                  'font-mono text-sm font-semibold tracking-[0.14em] text-canvas uppercase',
-                  'shadow-[0_0_62px_-20px_rgb(34,211,238)] disabled:opacity-55 disabled:blur-[1px]',
+                  'flex h-14 w-full items-center justify-center gap-[10px]',
+                  'md:h-[4.5rem] md:w-auto md:min-w-[12rem] md:px-10',
+                  'rounded-2xl border border-accent-strong bg-accent px-8',
+                  'font-mono text-sm font-semibold leading-none tracking-[0.14em] text-canvas uppercase',
+                  'shadow-[0_0_62px_-20px_rgb(34,211,238)] disabled:opacity-45 disabled:grayscale',
                 )}
-                whileHover={prefersReducedMotion ? undefined : { y: -1.5 }}
+                whileHover={prefersReducedMotion ? undefined : { scale: 1.01 }}
                 whileTap={prefersReducedMotion ? undefined : { scale: 0.986 }}
               >
                 Run scan <ArrowRight size={21} aria-hidden strokeWidth={1.7} />
