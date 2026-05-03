@@ -437,7 +437,7 @@ export default function InspectorApp() {
       eyebrow: 'Sitesrift inspector',
       title: 'Point. Scan. Read the fracture lines.',
       sub:
-        'SEO hygiene, browser-facing security, and honest assistant signals (robots + structured data hints) — not a PDF, not a “% chance to appear in ChatGPT.”',
+        'A technical SEO and website security inspector for any public URL—titles, previews, canonicals, robots.txt, HTTPS headers, and structured data from a single page fetch. Clear checklists, not PDF bundles or gimmicky AI ranking claims.',
       legal:
         'We open your public page once, read the HTML, and try the site robots file. Scores are checklists from what we could see — not promises.',
     }),
