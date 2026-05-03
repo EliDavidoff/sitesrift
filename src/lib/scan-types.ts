@@ -2,13 +2,13 @@
 
 export type RiskBand = 'low' | 'medium' | 'high'
 
-export type RiskLens = 'visibility' | 'defense'
+export type RiskLens = 'visibility' | 'defense' | 'assistants'
 
 export type Severity = 'good' | 'info' | 'warn' | 'bad'
 
 export type ScanFinding = {
   id: string
-  category: 'seo' | 'security'
+  category: 'seo' | 'security' | 'ai'
   /** Short headline shown in the row */
   title: string
   /** Plain explanation (expandable body main text) */
@@ -31,17 +31,27 @@ export type ScanMeta = {
   contentType: string
   finalUrl: string
   redirectCount: number
+  /** Wall-clock time for this scan on the server (ms), when returned by runScan */
+  scanDurationMs?: number
 }
 
 export type ScanReport = {
   canonicalUrl: string
   seoScore: number
   securityScore: number
+  /** Heuristic checklist score — not a prediction of chat mentions or citations */
+  aiScore: number
   findings: ScanFinding[]
   meta: ScanMeta
 }
 
 export type ScanErrorBody = {
   error: string
-  code?: 'blocked' | 'timeout' | 'bad_input' | 'not_html' | 'fetch_failed'
+  code?:
+    | 'blocked'
+    | 'timeout'
+    | 'bad_input'
+    | 'not_html'
+    | 'fetch_failed'
+    | 'rate_limited'
 }

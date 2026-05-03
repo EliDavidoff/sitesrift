@@ -1,5 +1,7 @@
 import { load } from 'cheerio'
 import type { FetchPageResult } from './fetch-page.ts'
+import type { RobotsFetchResult } from './robots.ts'
+import { checkAiCrawlers } from './robots.ts'
 import type {
   RiskBand,
   ScanFinding,
@@ -7,6 +9,7 @@ import type {
   ScanReport,
   Severity,
 } from '../src/lib/scan-types.ts'
+import { scoreBucketForCategory } from '../src/lib/scoring-rubric.ts'
 
 function collectSetCookie(h: Headers): string[] {
   const anyHeaders = h as Headers & { getSetCookie?: () => string[] }
@@ -40,7 +43,11 @@ function looksLikeHtml(ct: string, body: string) {
   return head.includes('<html') || head.includes('<!doctype html')
 }
 
-export function analyzeEnvelope(canonicalInput: string, page: FetchPageResult): ScanReport {
+export function analyzeEnvelope(
+  canonicalInput: string,
+  page: FetchPageResult,
+  robotsResult: RobotsFetchResult,
+): ScanReport {
   if (!looksLikeHtml(page.contentType, page.bodyText)) {
     throw new Error('That URL did not return a normal HTML page we could read.')
   }
@@ -519,8 +526,12 @@ export function analyzeEnvelope(canonicalInput: string, page: FetchPageResult): 
     })
   }
 
-  const seoScore = scoreBucket(findings, 'seo')
-  const securityScore = scoreBucket(findings, 'security')
+  const pathname = finalParsed.pathname || '/'
+  addAiFindings($, findings, pathname, robotsResult)
+
+  const seoScore = scoreBucketForCategory(findings, 'seo')
+  const securityScore = scoreBucketForCategory(findings, 'security')
+  const aiScore = scoreBucketForCategory(findings, 'ai')
 
   const meta: ScanMeta = {
     statusCode: page.statusCode,
@@ -537,19 +548,114 @@ export function analyzeEnvelope(canonicalInput: string, page: FetchPageResult): 
     canonicalUrl: canonicalInput,
     seoScore,
     securityScore,
+    aiScore,
     findings,
     meta,
   }
 }
 
-function scoreBucket(findings: ScanFinding[], category: 'seo' | 'security') {
-  let score = 100
-  for (const f of findings) {
-    if (f.category !== category) continue
-    if (f.severity === 'good') score += 0
-    else if (f.riskBand === 'high') score -= 14
-    else if (f.riskBand === 'medium') score -= 7
-    else score -= 3
+function addAiFindings(
+  $: ReturnType<typeof load>,
+  findings: ScanFinding[],
+  pathname: string,
+  robotsResult: RobotsFetchResult,
+) {
+  const jsonLdCount = $('script[type="application/ld+json"]').length
+  if (jsonLdCount > 0) {
+    push(findings, {
+      id: 'ai-jsonld-present',
+      category: 'ai',
+      lens: 'assistants',
+      title: 'Structured data (JSON-LD) on the page',
+      detail: `We found ${jsonLdCount} JSON-LD script block(s). Assistants and rich surfaces often reuse machine-readable facts when they are accurate.`,
+      riskBand: 'low',
+      riskWhy: 'Clear facts can be cited more consistently than scraped guesses.',
+      remedy: 'Keep JSON-LD aligned with what visitors actually see on the page.',
+      severity: 'good',
+    })
+  } else {
+    push(findings, {
+      id: 'ai-jsonld-absent',
+      category: 'ai',
+      lens: 'assistants',
+      title: 'No JSON-LD blocks on this HTML response',
+      detail:
+        'We did not see application/ld+json scripts here. Some assistants prefer explicit structured entities — absence is not fatal, just less explicit.',
+      riskBand: 'low',
+      riskWhy: 'Systems may rely more on plain text when structured facts are missing.',
+      remedy: 'Add JSON-LD where it genuinely describes your primary entity or content type.',
+      severity: 'info',
+    })
   }
-  return Math.max(0, Math.min(100, Math.round(score)))
+
+  if (!robotsResult.ok && robotsResult.reason === 'not_found') {
+    push(findings, {
+      id: 'ai-robots-missing',
+      category: 'ai',
+      lens: 'assistants',
+      title: 'robots.txt not found at the root we checked',
+      detail:
+        'Some crawlers assume permissive defaults when no file exists; others apply their own policies. This is informational — not a ranking score.',
+      riskBand: 'low',
+      riskWhy: 'You have no single published rules file for bots that honor robots.txt.',
+      remedy: 'Add a robots.txt if you want explicit crawl guidance at the domain root.',
+      severity: 'info',
+    })
+    return
+  }
+
+  if (!robotsResult.ok) {
+    const why =
+      robotsResult.reason === 'timeout'
+        ? 'Fetching robots.txt timed out.'
+        : robotsResult.reason === 'redirect'
+          ? 'robots.txt responded with a redirect — we do not follow redirects for this file in v1.'
+          : 'We could not read robots.txt reliably for this scan.'
+    push(findings, {
+      id: 'ai-robots-unreadable',
+      category: 'ai',
+      lens: 'assistants',
+      title: 'Could not read robots.txt',
+      detail: `${why} Assistant-oriented checks that rely on that file are skipped.`,
+      riskBand: 'low',
+      riskWhy: 'We cannot describe crawler rules we did not observe.',
+      remedy: 'Ensure /robots.txt returns plain text at the site root without blocking our fetch.',
+      severity: 'info',
+    })
+    return
+  }
+
+  const checks = checkAiCrawlers(robotsResult.text, pathname)
+  const blocked = checks.filter((c) => c.blocked)
+  if (blocked.length > 0) {
+    const listed = blocked.map((b) => b.agent).join(', ')
+    const wild = blocked.some((b) => b.matchedWildcard)
+    const band: RiskBand = blocked.length >= 6 ? 'high' : 'medium'
+    push(findings, {
+      id: 'ai-robots-path-blocked',
+      category: 'ai',
+      lens: 'assistants',
+      title: 'robots.txt may restrict crawlers on this URL path',
+      detail: `For “${pathname}”, these user-agents look disallowed by rules we parsed: ${listed}. Bots differ — some ignore robots.txt for certain products — so treat this as an observed file, not proof about every assistant experience.`,
+      riskBand: band,
+      riskWhy:
+        'When reputable crawlers honor your rules, parts of your site may not feed training or retrieval surfaces that respect robots.',
+      remedy: 'If blocking was unintentional for public marketing pages, loosen relevant Disallow lines after reviewing policy.',
+      detailTechnical: wild ? 'Some matches used User-agent: * rules.' : undefined,
+    })
+  } else {
+    push(findings, {
+      id: 'ai-robots-path-open',
+      category: 'ai',
+      lens: 'assistants',
+      title: 'robots.txt allows this path for the crawlers we checked',
+      detail:
+        'Parsed rules did not block the scanned path for our curated assistant-related user-agents (including wildcard rules). This does not guarantee inclusion anywhere — only what the file suggests.',
+      riskBand: 'low',
+      riskWhy: 'No explicit Disallow match showed up for this URL path in our parser.',
+      remedy: 'Revisit robots.txt whenever you launch new sections that should stay public or private.',
+      severity: 'good',
+    })
+  }
 }
+

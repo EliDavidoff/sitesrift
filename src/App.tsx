@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  ChevronDown,
   ExternalLink,
   Gauge,
   Lock,
@@ -7,38 +8,83 @@ import {
   Mail,
   MousePointerSquareDashed,
   ShieldCheck,
+  Sparkles,
 } from 'lucide-react'
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import type { JSX } from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { cn } from './lib/cn.ts'
-import type { RiskBand, ScanFinding, ScanReport, Severity } from './lib/scan-types.ts'
+import { deductionsList } from './lib/score-breakdown.ts'
+import { parseScanNdjsonStream } from './lib/scan-ndjson.ts'
+import { DEDUCTION_BY_BAND } from './lib/scoring-rubric.ts'
+import { scanStageIndex } from './lib/scan-stages.ts'
+import type { RiskBand, RiskLens, ScanFinding, ScanReport, Severity } from './lib/scan-types.ts'
 
 /** Replace these with your real donation + contact links */
 const CONTACT_EMAIL = 'hello@sitesrift.com'
 const PAYPAL_DONATE_URL = 'https://www.paypal.com/donate/'
 const MAILTO_CONTACT = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('Sitesrift full report')}&body=${encodeURIComponent('Hi — here is my URL and donation receipt info:\n\nURL:\nReceipt reference:\n')}`
 
+/** Lines up with server scan-stage stream order (see scan-stages.ts) */
 const LIVE_NARRATION = [
   {
-    title: 'Opening the page',
-    sub: 'We request the public homepage like a normal visitor, within tight safety limits.',
+    title: 'Validating and normalizing the URL',
+    sub: 'We enforce HTTPS for typing convenience and reject unsafe hosts before any fetch.',
   },
   {
-    title: 'Following redirects safely',
-    sub: 'If the link hops to another address, we stay within a capped chain.',
+    title: 'Fetching the public page',
+    sub: 'One GET — redirects follow only up to our cap — then we read the HTML envelope.',
   },
   {
-    title: 'Reading the HTML once',
-    sub: 'We scan titles, previews, headings — one pass, not a whole-site crawl.',
+    title: 'Reading robots.txt',
+    sub: 'Same host as the final address — small file cap — so crawl rules match the URL you scanned.',
   },
   {
-    title: 'Checking protective headers',
-    sub: 'We review security signals exposed on that single response — no login, no guessing passwords.',
+    title: 'Running checks',
+    sub: 'SEO, security headers/cookies, and assistant heuristics — all from that single pass.',
   },
 ] as const
 
+const FINDINGS_BUCKET_LABEL: Record<'ai' | 'seo' | 'security', string> = {
+  seo: 'SEO',
+  security: 'Security',
+  ai: 'AI & assistants',
+}
+
+function lensLabel(lens: RiskLens): string {
+  switch (lens) {
+    case 'visibility':
+      return 'findability'
+    case 'defense':
+      return 'defense'
+    case 'assistants':
+      return 'assistants'
+    default:
+      return lens
+  }
+}
+
 type Phase = 'idle' | 'scanning' | 'report'
+
+/** Minimum time on the scanning panel so fast responses do not flash past unread narration */
+const MIN_SCAN_DWELL_MS = 2000
+
+function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
+  if (ms <= 0) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const id = window.setTimeout(finish, ms)
+    function finish() {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }
+    function onAbort() {
+      clearTimeout(id)
+      signal.removeEventListener('abort', onAbort)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    signal.addEventListener('abort', onAbort)
+  })
+}
 
 function normalizeUrlCandidate(raw: string): { ok: true; url: string } | { ok: false; message: string } {
   const trimmed = raw.trim()
@@ -152,6 +198,74 @@ function ScoreTile({
   )
 }
 
+function ScoreHowItWorks({ report }: { report: ScanReport }) {
+  const pillars = [
+    { key: 'seo' as const, label: 'SEO posture', score: report.seoScore },
+    { key: 'security' as const, label: 'Security posture', score: report.securityScore },
+    { key: 'ai' as const, label: 'Assistant readiness', score: report.aiScore },
+  ]
+
+  return (
+    <details className="mt-8 rounded-[var(--radius-card)] border border-border bg-panel/80 px-6 py-5 text-left shadow-inner shadow-black/25 backdrop-blur-sm md:px-8 md:py-6">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-mono text-sm text-foreground [&::-webkit-details-marker]:hidden">
+        <span className="uppercase tracking-[0.28em] text-muted">Score checklist</span>
+        <span className="inline-flex items-center gap-2 text-accent">
+          How these numbers work
+          <ChevronDown className="size-4 shrink-0 opacity-90" aria-hidden />
+        </span>
+      </summary>
+      <div className="mt-6 space-y-6 font-mono text-sm leading-relaxed text-muted">
+        <p>
+          Each pillar starts at <span className="text-foreground">100</span>. We subtract points for findings that are{' '}
+          <strong className="font-semibold text-foreground">not</strong> marked{' '}
+          <span className="text-good">good</span> — a checklist from what we observed, not a verdict from Google or any
+          single AI provider.
+        </p>
+        <ul className="list-disc space-y-2 pl-5">
+          <li>
+            <span className="text-bad">High</span> risk −{DEDUCTION_BY_BAND.high} ·{' '}
+            <span className="text-warn">Medium</span> −{DEDUCTION_BY_BAND.medium} ·{' '}
+            <span className="text-info">Low</span> −{DEDUCTION_BY_BAND.low}
+          </li>
+          <li>
+            Rows marked <span className="text-good">good</span> subtract 0 — we still show them as helpful confirmations.
+          </li>
+        </ul>
+        <p className="text-[13px] text-muted">
+          If you see <span className="font-medium text-foreground">noindex</span> under SEO, many assistants treat that
+          as “not meant for broad public indexing” — overlap between search and assistant readiness, not two separate
+          bugs.
+        </p>
+        <div className="grid gap-8 md:grid-cols-3">
+          {pillars.map((p) => {
+            const rows = deductionsList(report.findings, p.key)
+            return (
+              <div key={p.key}>
+                <p className="border-b border-border pb-2 font-mono text-[11px] uppercase tracking-[0.22em] text-muted">
+                  {p.label} · <span className="tabular-nums text-foreground">{p.score}</span>/100
+                </p>
+                {rows.length === 0 ? (
+                  <p className="mt-3 text-[13px] text-muted">No deductions — only positives or light notes here.</p>
+                ) : (
+                  <ul className="mt-3 space-y-2 text-[13px]">
+                    {rows.map((r) => (
+                      <li key={r.id} className="border-l-2 border-accent/35 pl-3">
+                        <span className="tabular-nums text-accent">−{r.points}</span>{' '}
+                        <span className="text-foreground">{r.title}</span>{' '}
+                        <span className="text-muted">({r.riskBand})</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </details>
+  )
+}
+
 function FindingRow({ finding, index }: { finding: ScanFinding; index: number }) {
   const detailId = `${finding.id}-detail`
   return (
@@ -165,7 +279,7 @@ function FindingRow({ finding, index }: { finding: ScanFinding; index: number })
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-3">
             <p className="font-mono text-[11px] font-medium uppercase tracking-[0.34em] text-muted">
-              {finding.category} · {finding.lens === 'visibility' ? 'findability' : 'defense'}
+              {finding.category} · {lensLabel(finding.lens)}
             </p>
             <span
               className={cn(
@@ -300,6 +414,7 @@ const riskWeight = (b: RiskBand) => (b === 'high' ? 3 : b === 'medium' ? 2 : 1)
 export default function App() {
   const prefersReducedMotion = useReducedMotion()
   const headerRef = useRef<HTMLElement>(null)
+  const reportRef = useRef<HTMLElement | null>(null)
   const abortRef = useRef<AbortController | null>(null)
 
   const [phase, setPhase] = useState<Phase>('idle')
@@ -307,6 +422,8 @@ export default function App() {
   const [submissionError, setSubmissionError] = useState<string | null>(null)
 
   const [scanPhaseIndex, setScanPhaseIndex] = useState(0)
+  /** `server` = NDJSON stage events drive the checklist; `timer` = rotate narration while waiting */
+  const [scanProgressMode, setScanProgressMode] = useState<'timer' | 'server'>('timer')
   const [report, setReport] = useState<ScanReport | null>(null)
 
   const heroCopy = useMemo(
@@ -314,21 +431,33 @@ export default function App() {
       eyebrow: 'Sitesrift inspector',
       title: 'Point. Scan. Read the fracture lines.',
       sub:
-        'Fast SEO hygiene plus plain-English security posture — what searchers see, what browsers enforce — without a PDF lecture.',
+        'SEO hygiene, browser-facing security, and honest assistant signals (robots + structured data hints) — not a PDF, not a “% chance to appear in ChatGPT.”',
       legal:
-        'We open your public page once and read the signals we can see from the outside. Results are guidance, not a guarantee.',
+        'We open your public page once, read the HTML, and try the site robots file. Scores are checklists from what we could see — not promises.',
     }),
     [],
   )
 
   useEffect(() => {
     if (phase !== 'scanning') return
+    if (scanProgressMode !== 'timer') return
     const tick = prefersReducedMotion ? 2200 : 1600
     const id = window.setInterval(() => {
       setScanPhaseIndex((v) => (v + 1) % LIVE_NARRATION.length)
     }, tick)
     return () => clearInterval(id)
-  }, [phase, prefersReducedMotion])
+  }, [phase, scanProgressMode, prefersReducedMotion])
+
+  useEffect(() => {
+    if (phase !== 'report') return
+    const id = requestAnimationFrame(() => {
+      reportRef.current?.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      })
+    })
+    return () => cancelAnimationFrame(id)
+  }, [phase, report, prefersReducedMotion])
 
   const resetSession = useCallback(() => {
     abortRef.current?.abort()
@@ -338,6 +467,7 @@ export default function App() {
     setReport(null)
     setSubmissionError(null)
     setScanPhaseIndex(0)
+    setScanProgressMode('timer')
   }, [])
 
   const handleInspect = async () => {
@@ -358,24 +488,55 @@ export default function App() {
     abortRef.current = ac
 
     setScanPhaseIndex(0)
+    setScanProgressMode('timer')
     setReport(null)
     setPhase('scanning')
+    const scanStartedAt = performance.now()
 
     try {
       const res = await fetch('/api/scan', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/x-ndjson, application/json',
+        },
         body: JSON.stringify({ url: normalized.url }),
         signal: ac.signal,
       })
 
-      const data = (await res.json()) as ScanReport & { error?: string }
-
       if (!res.ok) {
+        const errJson = (await res.json().catch(() => ({}))) as { error?: string }
         setSubmissionError(
-          typeof data.error === 'string' ? data.error : 'That scan could not finish — try another URL.',
+          typeof errJson.error === 'string' ? errJson.error : 'That scan could not finish — try another URL.',
         )
         setPhase('idle')
+        return
+      }
+
+      const ct = res.headers.get('content-type') ?? ''
+      let data: ScanReport
+
+      try {
+        if (ct.includes('ndjson')) {
+          setScanProgressMode('server')
+          data = await parseScanNdjsonStream(res, (stage) => {
+            setScanPhaseIndex(scanStageIndex(stage))
+          })
+        } else {
+          data = (await res.json()) as ScanReport
+        }
+      } catch (parseErr) {
+        setScanProgressMode('timer')
+        const msg = parseErr instanceof Error ? parseErr.message : 'Scan failed.'
+        setSubmissionError(msg)
+        setPhase('idle')
+        return
+      }
+
+      const elapsed = performance.now() - scanStartedAt
+      try {
+        await sleepWithAbort(Math.max(0, MIN_SCAN_DWELL_MS - elapsed), ac.signal)
+      } catch {
         return
       }
 
@@ -406,7 +567,8 @@ export default function App() {
   } else if (phase === 'report' && report) {
     body = (
       <motion.section
-        className="mt-14 w-full text-left"
+        ref={reportRef}
+        className="mt-14 w-full scroll-mt-28 text-left"
         initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 14 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{
@@ -418,7 +580,8 @@ export default function App() {
           <div className="max-w-3xl space-y-4">
             <p className="font-mono text-xs uppercase tracking-[0.46em] text-muted">Scan snapshot</p>
             <h2 className="text-balance font-sans text-3xl tracking-tight text-foreground md:text-4xl">
-              Outside-in readout from one homepage fetch — SEO hints plus visible browser protections.
+              Outside-in readout: one HTML response, robots.txt on the same host, then SEO, security, and
+              assistant-readiness heuristics — not a chat-mention forecast.
             </h2>
             <p className="font-mono text-sm leading-relaxed text-accent/90">
               Typed · {report.canonicalUrl}
@@ -445,6 +608,12 @@ export default function App() {
               <div className="inline-flex flex-1 min-w-[min(440px,calc(100%-1rem))] items-center rounded-lg border border-border bg-well px-4 py-3 font-mono text-xs leading-relaxed text-muted">
                 {report.meta.tlsNote}
               </div>
+              {report.meta.scanDurationMs != null ? (
+                <div className="inline-flex items-center gap-2 rounded-lg border border-border bg-well px-4 py-2 font-mono text-xs text-muted">
+                  Server pass{' '}
+                  <span className="tabular-nums text-foreground">{report.meta.scanDurationMs}</span> ms
+                </div>
+              ) : null}
             </div>
           </div>
           <motion.button
@@ -476,7 +645,7 @@ export default function App() {
           </div>
         ) : null}
 
-        <div className="mt-10 grid gap-5 md:grid-cols-[minmax(0,420px)_1fr]">
+        <div className="mt-10 grid gap-5 md:grid-cols-3">
           <ScoreTile
             title="SEO posture"
             value={report.seoScore}
@@ -489,19 +658,29 @@ export default function App() {
             subtitle="Based on HTTPS signals and headers we could read from one response — not penetration testing."
             prefersReducedMotion={prefersReducedMotion}
           />
+          <ScoreTile
+            title="Assistant readiness"
+            value={report.aiScore}
+            subtitle="Heuristic checklist: robots.txt path rules + JSON-LD we saw — not a prediction of chat mentions."
+            prefersReducedMotion={prefersReducedMotion}
+          />
         </div>
 
-        <div className="mt-12 grid gap-10 xl:grid-cols-2">
-          {(['seo', 'security'] as const).map((bucket) => (
+        <ScoreHowItWorks report={report} />
+
+        <div className="mt-12 grid gap-10 xl:grid-cols-3">
+          {(['seo', 'security', 'ai'] as const).map((bucket) => (
             <div key={bucket} className="space-y-4">
               <div className="flex items-center gap-3">
                 {bucket === 'seo' ? (
                   <Gauge className="size-7 text-accent" strokeWidth={1.7} aria-hidden />
-                ) : (
+                ) : bucket === 'security' ? (
                   <MousePointerSquareDashed className="size-7 text-accent" strokeWidth={1.7} aria-hidden />
+                ) : (
+                  <Sparkles className="size-7 text-accent" strokeWidth={1.7} aria-hidden />
                 )}
-                <h3 className="font-sans text-2xl tracking-tight text-foreground capitalize">
-                  {bucket} findings
+                <h3 className="font-sans text-2xl tracking-tight text-foreground">
+                  {FINDINGS_BUCKET_LABEL[bucket]} findings
                 </h3>
               </div>
               <div className="flex flex-col gap-3">
@@ -528,7 +707,9 @@ export default function App() {
               </h3>
               <p className="mt-4 max-w-2xl text-[15px] leading-relaxed text-muted">
                 Donate via PayPal if you want to support deeper work, then email us with your URL and receipt
-                note. We coordinate manually — no instant PDF wizard here yet.
+                note. We coordinate manually — no instant PDF wizard here yet. Donations are appreciation for the
+                project, not a paid SLA or guaranteed turnaround; free snapshots on this page stay illustrative
+                heuristics, not warranties.
               </p>
               <ul className="mt-8 grid gap-3 font-mono text-sm text-muted">
                 <li className="rounded-lg border border-border bg-well/95 px-4 py-3">
@@ -581,7 +762,8 @@ export default function App() {
         </div>
 
         <p className="mt-10 pb-8 text-center font-mono text-xs text-muted">
-          Educational snapshot — not legal or pentesting advice. Always validate critical issues with your team.
+          Educational snapshot — not legal or pentesting advice. Assistant scores are surface signals only, not
+          predictions. Validate anything critical with your team.
         </p>
       </motion.section>
     )
@@ -603,7 +785,7 @@ export default function App() {
           </p>
           <div className="mt-14 flex flex-wrap justify-center gap-4">
             <div className="inline-flex rounded-full border border-border bg-well/95 px-4 py-[9px] font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              Live scan · single-page pass
+              Live scan · 4-stage pipeline · HTML + robots.txt
             </div>
           </div>
         </motion.div>
@@ -671,7 +853,8 @@ export default function App() {
                 </motion.p>
               ) : (
                 <p className="relative px-[34px] pb-[30px] text-center font-mono text-[11px] leading-relaxed text-muted md:px-[58px]">
-                  HTTPS assumed when you omit the scheme · We fetch one public page — no stealth crawling ·{' '}
+                  HTTPS assumed when you omit the scheme · We fetch one public HTML response and try
+                  robots.txt on the same host — no whole-site crawl ·{' '}
                   <button
                     type="button"
                     className="text-accent underline underline-offset-4 hover:text-accent-strong"
@@ -712,22 +895,22 @@ export default function App() {
           <span className="truncate text-muted">
             inspector <span className="text-accent/90">{statusLabel}</span>
           </span>
-          <div className="ml-auto hidden items-center gap-3 font-mono text-[10px] normal-case tracking-[0.06em] text-muted md:flex">
-            <Gauge strokeWidth={1.6} className="size-4 shrink-0 text-accent" aria-hidden /> SEO / surface
-            security
+          <div className="ml-auto hidden items-center gap-2 font-mono text-[10px] normal-case tracking-[0.06em] text-muted md:flex">
+            <Gauge strokeWidth={1.6} className="size-4 shrink-0 text-accent" aria-hidden />
+            SEO · security · <Sparkles className="size-3.5 shrink-0 text-accent" aria-hidden /> assistants
           </div>
         </div>
       </header>
 
       <motion.main
-        className="surface-grid relative isolate flex flex-1 flex-col overflow-hidden rounded-br-[calc(var(--radius-card)+34px)] rounded-bl-[calc(var(--radius-card)+34px)] border border-t-0 border-border bg-well/94 px-10 pt-[84px] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-lg md:px-[84px]"
+        className="surface-grid relative isolate flex min-h-0 flex-1 flex-col overflow-hidden rounded-br-[calc(var(--radius-card)+34px)] rounded-bl-[calc(var(--radius-card)+34px)] border border-t-0 border-border bg-well/94 px-10 pt-[84px] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-lg md:px-[84px]"
         layout
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.section
             key={phase === 'idle' ? 'landing' : phase === 'scanning' ? 'scan' : 'report'}
             layout
-            className={cn('relative z-[1]', phase === 'report' ? 'flex flex-1 flex-col' : '')}
+            className="relative z-[1]"
             initial={{
               opacity: prefersReducedMotion ? 1 : 0,
               y: prefersReducedMotion ? 0 : phase === 'scanning' ? 10 : -8,

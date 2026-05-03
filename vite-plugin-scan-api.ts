@@ -1,6 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
-import { runScan } from './scan-api/index.ts'
+import { runScan, type ScanStageId } from './scan-api/index.ts'
+import { rateLimitAllow } from './scan-api/rate-limit.ts'
+import { hostnameOnly, logScanLine } from './scan-api/scan-log.ts'
+import type { ScanErrorBody } from './src/lib/scan-types.ts'
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -24,6 +27,36 @@ function sendJson(res: ServerResponse, status: number, payload: unknown) {
   res.setHeader('Content-Type', 'application/json')
   res.end(JSON.stringify(payload))
 }
+
+function clientIp(req: IncomingMessage): string {
+  const xff = req.headers['x-forwarded-for']
+  if (typeof xff === 'string' && xff.length > 0) {
+    return xff.split(',')[0]?.trim() ?? 'unknown'
+  }
+  return req.socket?.remoteAddress ?? 'unknown'
+}
+
+function wantsNdjson(req: IncomingMessage): boolean {
+  const a = req.headers.accept ?? ''
+  return a.includes('application/x-ndjson') || a.includes('application/ndjson')
+}
+
+function writeNdjson(res: ServerResponse, obj: unknown) {
+  res.write(`${JSON.stringify(obj)}\n`)
+}
+
+function classifyScanError(message: string): NonNullable<ScanErrorBody['code']> {
+  const lower = message.toLowerCase()
+  if (lower.includes('private network') || lower.includes('cannot be scanned')) return 'blocked'
+  if (lower.includes('too long') || lower.includes('abort')) return 'timeout'
+  if (lower.includes('normal html')) return 'not_html'
+  if (lower.includes('only http')) return 'bad_input'
+  return 'fetch_failed'
+}
+
+/** Tunable abuse guard for dev/preview servers */
+const RATE_LIMIT_MAX = 45
+const RATE_LIMIT_WINDOW_MS = 60_000
 
 export function scanApiPlugin(): Plugin {
   return {
@@ -78,21 +111,71 @@ async function scanMiddleware(
     return
   }
 
+  const ip = clientIp(req)
+  const rateKey = `scan:${ip}`
+  if (!rateLimitAllow(rateKey, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
+    const host = hostnameOnly(bodyJson.url)
+    logScanLine({ outcome: 'rate_limited', host, code: 'rate_limited' })
+    sendJson(res, 429, {
+      error: 'Too many scans from this address — try again in about a minute.',
+      code: 'rate_limited',
+    })
+    return
+  }
+
+  const urlStr = bodyJson.url
+  const host = hostnameOnly(urlStr)
+  const stream = wantsNdjson(req)
+  const tStart = Date.now()
+
   const controller = new AbortController()
   const kill = setTimeout(() => controller.abort(), 28_000)
 
+  if (stream) {
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('X-Content-Type-Options', 'nosniff')
+
+    try {
+      const report = await runScan(urlStr, controller.signal, (stage: ScanStageId) => {
+        writeNdjson(res, { type: 'stage', stage })
+      })
+      writeNdjson(res, { type: 'done', report })
+      logScanLine({ outcome: 'ok', host, ms: Date.now() - tStart })
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Scan failed.'
+      const code = classifyScanError(message)
+      writeNdjson(res, { type: 'error', error: message, code })
+      logScanLine({
+        outcome: 'scan_error',
+        host,
+        ms: Date.now() - tStart,
+        code,
+        message,
+      })
+    } finally {
+      clearTimeout(kill)
+      res.end()
+    }
+    return
+  }
+
   try {
-    const report = await runScan(bodyJson.url, controller.signal)
+    const report = await runScan(urlStr, controller.signal)
     sendJson(res, 200, report)
+    logScanLine({ outcome: 'ok', host, ms: Date.now() - tStart })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Scan failed.'
-    const lower = message.toLowerCase()
-    let code: 'blocked' | 'timeout' | 'bad_input' | 'not_html' | 'fetch_failed' = 'fetch_failed'
-    if (lower.includes('private network') || lower.includes('cannot be scanned')) code = 'blocked'
-    else if (lower.includes('too long') || lower.includes('abort')) code = 'timeout'
-    else if (lower.includes('normal html')) code = 'not_html'
-    else if (lower.includes('only http')) code = 'bad_input'
+    const code = classifyScanError(message)
     sendJson(res, 400, { error: message, code })
+    logScanLine({
+      outcome: 'scan_error',
+      host,
+      ms: Date.now() - tStart,
+      code,
+      message,
+    })
   } finally {
     clearTimeout(kill)
   }
