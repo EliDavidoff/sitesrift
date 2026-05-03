@@ -882,8 +882,16 @@ export default function App() {
     phase === 'idle' ? 'Ready' : phase === 'scanning' ? 'Scanning' : 'Report ready'
 
   return (
-    <div className="relative mx-auto flex min-h-[100svh] w-[min(1180px,100%)] flex-col px-6 pb-[52px] text-center md:px-10">
-      <div className="pointer-events-none absolute inset-x-[-12%] bottom-[-20%] h-[560px] blur-[118px]" aria-hidden>
+    <div
+      className={cn(
+        'relative mx-auto flex w-[min(1180px,100%)] flex-col px-6 pb-10 text-center md:px-10',
+        phase !== 'report' && 'min-h-[100svh]',
+      )}
+    >
+      <div
+        className="pointer-events-none absolute inset-x-[-12%] bottom-0 h-[min(560px,50svh)] blur-[118px]"
+        aria-hidden
+      >
         <div className="h-full rounded-[420px] bg-[radial-gradient(circle,rgba(34,211,238,0.12),transparent_73%)]" />
       </div>
 
@@ -908,16 +916,15 @@ export default function App() {
       </header>
 
       <motion.main
+        key={phase === 'report' ? 'report-main' : 'flow-main'}
         className={cn(
           'surface-grid relative isolate flex min-h-0 flex-col items-start overflow-hidden rounded-br-[calc(var(--radius-card)+34px)] rounded-bl-[calc(var(--radius-card)+34px)] border border-t-0 border-border bg-well/94 px-10 pt-[84px] shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-lg md:px-[84px]',
-          phase === 'report' ? 'grow-0' : 'flex-1',
+          phase === 'report' ? '!h-auto grow-0' : 'flex-1',
         )}
-        layout
       >
         <AnimatePresence mode="wait" initial={false}>
           <motion.section
             key={phase === 'idle' ? 'landing' : phase === 'scanning' ? 'scan' : 'report'}
-            layout
             className="relative z-[1] w-full"
             initial={{
               opacity: prefersReducedMotion ? 1 : 0,
