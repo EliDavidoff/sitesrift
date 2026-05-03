@@ -14,7 +14,7 @@ export function SiteFooter({ className }: Props) {
   const y = new Date().getFullYear()
   return (
     <footer
-      className={cn('relative z-[4] space-y-5 px-6 pt-9 text-center md:px-10', className)}
+      className={cn('relative z-[4] space-y-5 pt-9 text-center', className)}
     >
       <nav
         className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2"
