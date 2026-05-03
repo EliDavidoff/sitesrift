@@ -53,14 +53,23 @@ export function PrivacyPage() {
         <ul className="list-inside list-disc space-y-2 pl-1 marker:text-accent">
           <li>
             <strong className="text-foreground">Client IP address</strong> is visible to our hosting/API layer and used
-            for <strong className="text-foreground">abuse prevention</strong>. In typical bundled deployments today, heavy
-            repeat scanning from the same address may hit a throttle on the order of{' '}
-            <strong className="text-foreground">~45 scan requests per IP per sliding minute</strong> — tuning may differ
-            in production; contact us if you need enterprise limits.
+            for <strong className="text-foreground">abuse prevention</strong>. Heavy repeat scanning from what we treat as
+            the same source is throttled on the order of{' '}
+            <strong className="text-foreground">~45 scan requests per sliding minute</strong> — we key that by the
+            connection/IP our server sees unless we configure trusted proxy headers at the edge; tuning may differ from
+            defaults; contact us if you need enterprise limits.
           </li>
           <li>
             Each scan runs under a server-side timeout (on the order of tens of seconds) so stalled targets do not hold
             workers open indefinitely.
+          </li>
+          <li>
+            Beyond the primary HTML fetch and robots file probe, scanners may pull <strong className="text-foreground">
+              bounded requests
+            </strong>{' '}
+            for reachable favicon / touch icons when your markup exposes them—or check the conventional{' '}
+            <code className="font-mono text-[13px] text-accent">/favicon.ico</code> path—using the same public-host guardrails
+            as other outbound calls.
           </li>
           <li>
             In development-style environments, lightweight <strong className="text-foreground">console logs</strong> may

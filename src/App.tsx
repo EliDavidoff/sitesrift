@@ -441,9 +441,9 @@ export default function InspectorApp() {
       eyebrow: 'Single-page URL inspector',
       title: 'Point. Scan. Read the fracture lines.',
       sub:
-        'A technical SEO and website security inspector for any public URL—titles, previews, canonicals, robots.txt, HTTPS headers, and structured data from a single page fetch. Clear checklists, not PDF bundles or gimmicky AI ranking claims.',
+        'A technical SEO and website security inspector for any public URL—titles, previews, favicons, canonicals, robots.txt, HTTPS headers, and structured data from a single page fetch. Clear checklists, not PDF bundles or gimmicky AI ranking claims.',
       legal:
-        'We open your public page once, read the HTML, and try the site robots file. Scores are checklists from what we could see — not promises.',
+        'We open your public page once, read the HTML, try the site robots file, and lightly probe icon URLs surfaced in that HTML. Scores are checklists from what we could see — not promises.',
     }),
     [],
   )
@@ -549,6 +549,9 @@ export default function InspectorApp() {
         if (!message) {
           if (res.status === 429 || errJson.code === 'rate_limited')
             message = 'Too many scans from this network — pause a minute or switch networks.'
+          else if (res.status === 503 || errJson.code === 'overloaded')
+            message =
+              'The scanner hit a temporary capacity limit — wait a few seconds and try again.'
           else if (res.status >= 500)
             message = 'The scanner service had an internal error — try again in a moment.'
           else if (res.status === 413)
@@ -717,7 +720,8 @@ export default function InspectorApp() {
         <div className="mt-10 space-y-4">
           <p className="max-w-3xl font-mono text-xs leading-relaxed text-muted md:text-[13px]">
             <span className="font-semibold text-foreground">Snapshot method:</span> one routed HTML fetch plus a{' '}
-            <span className="text-foreground">robots.txt</span> probe on that host—not a crawler, not lab pentesting. Pillars below
+            <span className="text-foreground">robots.txt</span> probe and reachable favicon checks on that host—not a crawler, not lab
+            pentesting. Pillars below
             are <span className="text-foreground">heuristic checklist scores</span>; treat big gaps as hypotheses to verify with
             your stack, not contractual grades.
           </p>
@@ -725,7 +729,7 @@ export default function InspectorApp() {
           <ScoreTile
             title="SEO posture"
             value={report.seoScore}
-            subtitle="Based on titles, previews, canonical hints, mobile viewport — not keyword rankings."
+            subtitle="Based on titles, previews, favicons, canonical hints, mobile viewport — not keyword rankings."
             prefersReducedMotion={prefersReducedMotion}
           />
           <ScoreTile
@@ -879,7 +883,7 @@ export default function InspectorApp() {
             className="mt-14 flex flex-wrap justify-center gap-4"
           >
             <div className="inline-flex rounded-full border border-border bg-well/95 px-4 py-[9px] font-mono text-[11px] uppercase tracking-[0.28em] text-muted">
-              Live scan · 4-stage pipeline · HTML + robots.txt
+              Live scan · 4-stage pipeline · HTML + robots.txt + favicon probes
             </div>
           </motion.div>
         </motion.div>
@@ -1005,8 +1009,8 @@ export default function InspectorApp() {
                 </motion.p>
               ) : (
                 <p className="relative px-[34px] pb-[30px] text-center font-mono text-[11px] leading-relaxed text-muted md:px-[58px]">
-                  HTTPS assumed when you omit the scheme · We fetch one public HTML response and try
-                  robots.txt on the same host — no whole-site crawl ·{' '}
+                  HTTPS assumed when you omit the scheme · We fetch one public HTML response and try robots.txt plus
+                  icon URLs on that host — no whole-site crawl ·{' '}
                   <button
                     type="button"
                     className="text-accent underline underline-offset-4 hover:text-accent-strong"

@@ -13,7 +13,7 @@ export function hostnameOnly(rawUrl: string): string {
   }
 }
 
-export type ScanLogOutcome = 'ok' | 'client_error' | 'rate_limited' | 'scan_error'
+export type ScanLogOutcome = 'ok' | 'client_error' | 'rate_limited' | 'overloaded' | 'scan_error'
 
 export function logScanLine(payload: {
   outcome: ScanLogOutcome

@@ -39,7 +39,8 @@ export function TermsPage() {
           <strong className="text-foreground">public URL</strong> you choose. In typical operation that means constrained
           fetches across the stages described in-product (for example: normalize the URL; fetch HTML with redirect caps and
           a server timeout; read <code className="font-mono text-[13px] text-accent">robots.txt</code> expectations on the
-          same host envelope; derive heuristic checklist scores).
+          same host envelope; probe reachable tab/touch icons with byte caps matching the shipped scanner; derive heuristic
+          checklist scores).
         </p>
         <p>
           Outputs are explanatory summaries —{' '}

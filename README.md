@@ -5,8 +5,8 @@
 ## What it does today
 
 - **Client:** React 19 + TypeScript + Vite + Tailwind CSS + Motion (`src/App.tsx`, `src/pages/*`).
-- **Scan API:** Vite dev middleware `POST /api/scan` with optional NDJSON staging (`vite-plugin-scan-api.ts` → `scan-api/`): URL normalization → HTML fetch with redirect/step limits → robots.txt read → analysis.
-- **Abuse knobs (bundled defaults):** request body cap, per-IP throttle on the scan route, hostname-only structured console logs in preview-style setups — tune before any public blast.
+- **Scan API:** Vite dev middleware `POST /api/scan` with optional NDJSON staging (`vite-plugin-scan-api.ts` → `scan-api/`): URL normalization → HTML fetch with redirect/step limits → robots.txt read → bounded favicon/touch-icon probes → analysis.
+- **Abuse knobs (bundled defaults):** request body cap, per-client-key throttle (TCP peer by default; optional `SCAN_API_TRUST_PROXY` for CDN/LB headers — see `DEPLOY.md`), concurrency cap, hostname-only structured console logs in preview-style setups — tune before any public blast.
 
 ## Prerequisites
 
@@ -20,17 +20,6 @@ npm run dev
 ```
 
 Open `http://127.0.0.1:5173/`. SPA routes `/terms`, `/privacy`, `/accessibility` work under `npm run dev` when navigated inside the app.
-
-### Phone or a shareable `https://…` link (dev)
-
-I can’t host your machine from the cloud for you, but you can get a **temporary public URL** that tunnels to your laptop:
-
-1. **Terminal A:** `npm run dev` (leave it running).
-2. **Terminal B:** `npm run tunnel` — it prints a URL like `https://something.loca.lt`. Open that on your iPhone (Safari). The first visit may show a **localtunnel** click-through banner.
-
-**Same Wi‑Fi only (no tunnel):** `npm run dev:lan`, then on the phone open `http://YOUR_MAC_IP:5173` (your Mac’s LAN IP from System Settings → Network).
-
-For a **stable** link, deploy (e.g. Vercel/Netlify) — see **[DEPLOY.md](DEPLOY.md)**.
 
 ```bash
 npm run build && npm run preview

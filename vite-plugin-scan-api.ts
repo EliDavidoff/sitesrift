@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import { runScan, type ScanStageId } from './scan-api/index.ts'
+import { scanClientIp } from './scan-api/client-ip.ts'
 import { rateLimitAllow } from './scan-api/rate-limit.ts'
+import { scanEnvInt } from './scan-api/scan-env.ts'
+import { acquireScanSlot, releaseScanSlot } from './scan-api/scan-slot.ts'
 import { hostnameOnly, logScanLine } from './scan-api/scan-log.ts'
 import type { ScanErrorBody } from './src/lib/scan-types.ts'
 
@@ -28,14 +31,6 @@ function sendJson(res: ServerResponse, status: number, payload: unknown) {
   res.end(JSON.stringify(payload))
 }
 
-function clientIp(req: IncomingMessage): string {
-  const xff = req.headers['x-forwarded-for']
-  if (typeof xff === 'string' && xff.length > 0) {
-    return xff.split(',')[0]?.trim() ?? 'unknown'
-  }
-  return req.socket?.remoteAddress ?? 'unknown'
-}
-
 function wantsNdjson(req: IncomingMessage): boolean {
   const a = req.headers.accept ?? ''
   return a.includes('application/x-ndjson') || a.includes('application/ndjson')
@@ -54,9 +49,10 @@ function classifyScanError(message: string): NonNullable<ScanErrorBody['code']> 
   return 'fetch_failed'
 }
 
-/** Tunable abuse guard for dev/preview servers */
-const RATE_LIMIT_MAX = 45
-const RATE_LIMIT_WINDOW_MS = 60_000
+/** Tunable via env — see DEPLOY.md */
+const RATE_LIMIT_MAX = scanEnvInt('SCAN_API_RATE_LIMIT_MAX', 45, 1, 500)
+const RATE_LIMIT_WINDOW_MS = scanEnvInt('SCAN_API_RATE_LIMIT_WINDOW_MS', 60_000, 5_000, 3_600_000)
+const SCAN_ABORT_MS = scanEnvInt('SCAN_API_ABORT_MS', 28_000, 5_000, 180_000)
 
 export function scanApiPlugin(): Plugin {
   return {
@@ -111,7 +107,7 @@ async function scanMiddleware(
     return
   }
 
-  const ip = clientIp(req)
+  const ip = scanClientIp(req)
   const rateKey = `scan:${ip}`
   if (!rateLimitAllow(rateKey, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS)) {
     const host = hostnameOnly(bodyJson.url)
@@ -126,27 +122,59 @@ async function scanMiddleware(
   const urlStr = bodyJson.url
   const host = hostnameOnly(urlStr)
   const stream = wantsNdjson(req)
+
+  const acquired = await acquireScanSlot()
+  if (!acquired) {
+    logScanLine({ outcome: 'overloaded', host, code: 'overloaded' })
+    sendJson(res, 503, {
+      error: 'Scanner is briefly at capacity — try again in a few seconds.',
+      code: 'overloaded',
+    })
+    return
+  }
+
   const tStart = Date.now()
-
   const controller = new AbortController()
-  const kill = setTimeout(() => controller.abort(), 28_000)
+  const kill = setTimeout(() => controller.abort(), SCAN_ABORT_MS)
 
-  if (stream) {
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
-    res.setHeader('Cache-Control', 'no-store')
-    res.setHeader('X-Content-Type-Options', 'nosniff')
+  try {
+    if (stream) {
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('X-Content-Type-Options', 'nosniff')
+
+      try {
+        const report = await runScan(urlStr, controller.signal, (stage: ScanStageId) => {
+          writeNdjson(res, { type: 'stage', stage })
+        })
+        writeNdjson(res, { type: 'done', report })
+        logScanLine({ outcome: 'ok', host, ms: Date.now() - tStart })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Scan failed.'
+        const code = classifyScanError(message)
+        writeNdjson(res, { type: 'error', error: message, code })
+        logScanLine({
+          outcome: 'scan_error',
+          host,
+          ms: Date.now() - tStart,
+          code,
+          message,
+        })
+      } finally {
+        res.end()
+      }
+      return
+    }
 
     try {
-      const report = await runScan(urlStr, controller.signal, (stage: ScanStageId) => {
-        writeNdjson(res, { type: 'stage', stage })
-      })
-      writeNdjson(res, { type: 'done', report })
+      const report = await runScan(urlStr, controller.signal)
+      sendJson(res, 200, report)
       logScanLine({ outcome: 'ok', host, ms: Date.now() - tStart })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Scan failed.'
       const code = classifyScanError(message)
-      writeNdjson(res, { type: 'error', error: message, code })
+      sendJson(res, 400, { error: message, code })
       logScanLine({
         outcome: 'scan_error',
         host,
@@ -154,29 +182,9 @@ async function scanMiddleware(
         code,
         message,
       })
-    } finally {
-      clearTimeout(kill)
-      res.end()
     }
-    return
-  }
-
-  try {
-    const report = await runScan(urlStr, controller.signal)
-    sendJson(res, 200, report)
-    logScanLine({ outcome: 'ok', host, ms: Date.now() - tStart })
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Scan failed.'
-    const code = classifyScanError(message)
-    sendJson(res, 400, { error: message, code })
-    logScanLine({
-      outcome: 'scan_error',
-      host,
-      ms: Date.now() - tStart,
-      code,
-      message,
-    })
   } finally {
     clearTimeout(kill)
+    releaseScanSlot()
   }
 }

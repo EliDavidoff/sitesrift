@@ -1,6 +1,8 @@
+import { load } from 'cheerio'
 import { analyzeEnvelope } from './analyze.ts'
 import { fetchPageEnvelope } from './fetch-page.ts'
 import { fetchRobotsTxt } from './robots.ts'
+import { probeFaviconForPage } from './favicon-probe.ts'
 import type { ScanReport } from '../src/lib/scan-types.ts'
 import type { ScanStageId } from '../src/lib/scan-stages.ts'
 
@@ -30,8 +32,11 @@ export async function runScan(
   onStage?.('fetch_robots')
   const robotsResult = await fetchRobotsTxt(origin, signal)
 
+  const $ = load(page.bodyText)
+  const faviconSummary = await probeFaviconForPage($, page.finalUrl, signal)
+
   onStage?.('analyze')
-  const report = analyzeEnvelope(normalized, page, robotsResult)
+  const report = analyzeEnvelope(normalized, page, robotsResult, faviconSummary, $)
 
   return {
     ...report,

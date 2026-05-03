@@ -1,4 +1,4 @@
-import { load } from 'cheerio'
+import type { CheerioAPI } from 'cheerio'
 import type { FetchPageResult } from './fetch-page.ts'
 import type { RobotsFetchResult } from './robots.ts'
 import { checkAiCrawlers } from './robots.ts'
@@ -10,6 +10,7 @@ import type {
   Severity,
 } from '../src/lib/scan-types.ts'
 import { scoreBucketForCategory } from '../src/lib/scoring-rubric.ts'
+import type { FaviconProbeSummary } from './favicon-probe.ts'
 
 function collectSetCookie(h: Headers): string[] {
   const anyHeaders = h as Headers & { getSetCookie?: () => string[] }
@@ -43,16 +44,124 @@ function looksLikeHtml(ct: string, body: string) {
   return head.includes('<html') || head.includes('<!doctype html')
 }
 
+function clipUrl(u: string, max = 120): string {
+  if (u.length <= max) return u
+  return `${u.slice(0, max)}…`
+}
+
+function addSeoFaviconFindings(findings: ScanFinding[], fav: FaviconProbeSummary) {
+  if (fav.workingUrl && fav.source === 'declared-tab') {
+    push(findings, {
+      id: 'seo-favicon-ok',
+      category: 'seo',
+      title: 'Favicon / tab icon',
+      detail: `A \`<link rel="icon">\` (or mask / fluid icon) target returned usable image bytes: ${clipUrl(fav.workingUrl)}.`,
+      riskBand: 'low',
+      riskWhy: 'Tabs, bookmarks, and history pick up a clear brand mark instead of a generic placeholder.',
+      remedy: 'Keep sizes and formats aligned with what your CDN actually serves.',
+      lens: 'visibility',
+      severity: 'good',
+    })
+    return
+  }
+
+  if (fav.workingUrl && fav.source === 'declared-touch') {
+    push(findings, {
+      id: 'seo-favicon-touch',
+      category: 'seo',
+      title: 'Favicon / touch icon present',
+      detail: `We verified an Apple touch icon URL (${clipUrl(fav.workingUrl)}). Classic browser tabs usually prefer an explicit \`rel="icon"\` hint as well.`,
+      riskBand: 'low',
+      riskWhy: 'Some surfaces only surfaced the larger touch asset while tab icons stayed generic.',
+      remedy: 'Also ship a `<link rel="icon" sizes="…" href="…">` tuned for common tab sizes.',
+      lens: 'visibility',
+      severity: 'good',
+    })
+    return
+  }
+
+  if (fav.workingUrl && fav.source === 'favicon.ico') {
+    if (fav.failedDeclaredTabUrls.length > 0) {
+      push(findings, {
+        id: 'seo-favicon-ico-fallback',
+        category: 'seo',
+        title: 'Favicon link tags mismatched assets',
+        detail:
+          `Some declared tab-icon links did not return a usable image in our probe, yet ${clipUrl(fav.workingUrl)} works — browsers typically fall back to that path.`,
+        riskBand: 'low',
+        riskWhy:
+          'Stale or absolute paths in `<link rel="icon">` confuse audits and previews even when fallback icons still render.',
+        remedy: 'Point `<link rel="icon">` at the canonical asset URLs you intend to defend in production.',
+        lens: 'visibility',
+        severity: 'info',
+      })
+      return
+    }
+
+    push(findings, {
+      id: 'seo-favicon-default-ico',
+      category: 'seo',
+      title: 'Favicon via `/favicon.ico`',
+      detail:
+        'No explicit `<link rel="icon">` appeared in this HTML, but `/favicon.ico` on your host responds with usable image bytes — many browsers adopt it automatically.',
+      riskBand: 'low',
+      riskWhy:
+        'The conventional path masks missing markup — still fine for UX, weaker for explicit auditing of variants.',
+      remedy: 'Add `<link rel="icon">` (and PNG/WebP/App mask icons where needed) so crawlers agree on canonical assets.',
+      lens: 'visibility',
+      severity: 'good',
+    })
+    return
+  }
+
+  if (fav.hasDataUrlTabIcon) {
+    push(findings, {
+      id: 'seo-favicon-data-url',
+      category: 'seo',
+      title: 'Favicon is inline-only',
+      detail:
+        'We spotted a tab icon declared as an inline **`data:`** URL. That can skip network latency but hides the asset from standalone URL checks.',
+      riskBand: 'low',
+      riskWhy:
+        'Some CDNs and auditors expect a reachable favicon file even when inlined favicons behave fine locally.',
+      remedy: 'Pair inline icons with mirrored static assets during production rollout if tooling demands it.',
+      lens: 'visibility',
+      severity: 'info',
+    })
+    return
+  }
+
+  const detailNoLinks =
+    'No recognizable `<link rel="icon">` / mask-icon markup appeared in this HTML response (or probes did not validate), touch-icon probes did not return a usable asset, and `/favicon.ico` did not validate as image bytes either.'
+  const detailBrokenLinks =
+    'Declared tab icon URLs did not return usable images in bounded probes, touch-icon candidates did not help, and `/favicon.ico` also failed.'
+  push(findings, {
+    id: 'seo-favicon-missing',
+    category: 'seo',
+    title: 'No verified favicon / tab icon URL',
+    detail:
+      fav.declaredTabCandidates.length > 0 || fav.failedDeclaredTabUrls.length > 0
+        ? detailBrokenLinks
+        : detailNoLinks,
+    riskBand: 'medium',
+    riskWhy: 'Bookmarks, pinned tabs, and share contexts may show a brittle or blank glyph.',
+    remedy:
+      'Ship a reachable `/favicon.ico` or `<link rel="icon" href="…">` to a stable image (SVG/PNG/ICO) with sensible caching headers.',
+    lens: 'visibility',
+  })
+}
+
 export function analyzeEnvelope(
   canonicalInput: string,
   page: FetchPageResult,
   robotsResult: RobotsFetchResult,
+  faviconSummary: FaviconProbeSummary,
+  $: CheerioAPI,
 ): ScanReport {
   if (!looksLikeHtml(page.contentType, page.bodyText)) {
     throw new Error('That URL did not return a normal HTML page we could read.')
   }
 
-  const $ = load(page.bodyText)
   const findings: ScanFinding[] = []
 
   const finalUrl = page.finalUrl
@@ -280,6 +389,8 @@ export function analyzeEnvelope(
       severity: 'good',
     })
   }
+
+  addSeoFaviconFindings(findings, faviconSummary)
 
   const lang = $('html').attr('lang')?.trim()
   if (!lang) {
@@ -555,7 +666,7 @@ export function analyzeEnvelope(
 }
 
 function addAiFindings(
-  $: ReturnType<typeof load>,
+  $: CheerioAPI,
   findings: ScanFinding[],
   pathname: string,
   robotsResult: RobotsFetchResult,

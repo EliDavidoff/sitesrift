@@ -54,4 +54,5 @@ export type ScanErrorBody = {
     | 'not_html'
     | 'fetch_failed'
     | 'rate_limited'
+    | 'overloaded'
 }
