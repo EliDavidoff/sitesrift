@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import './index.css'
 import InspectorApp from './App.tsx'
 import { AccessibilityPage } from './pages/AccessibilityPage.tsx'
+import { DevelopersPage } from './pages/DevelopersPage.tsx'
 import { LegalLayout } from './pages/LegalLayout.tsx'
 import { PrivacyPage } from './pages/PrivacyPage.tsx'
 import { TermsPage } from './pages/TermsPage.tsx'
@@ -34,6 +35,14 @@ createRoot(document.getElementById('root')!).render(
           element={
             <LegalLayout>
               <AccessibilityPage />
+            </LegalLayout>
+          }
+        />
+        <Route
+          path="/developers"
+          element={
+            <LegalLayout>
+              <DevelopersPage />
             </LegalLayout>
           }
         />

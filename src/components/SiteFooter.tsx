@@ -35,6 +35,12 @@ export function SiteFooter({ className }: Props) {
         <Link className={link} to="/accessibility">
           Accessibility
         </Link>
+        <span className="font-mono text-[10px] text-border" aria-hidden>
+          ·
+        </span>
+        <Link className={link} to="/developers">
+          Developers
+        </Link>
       </nav>
       <p className="text-[11px] font-mono uppercase tracking-[0.38em] text-muted">
         © {y} Sitesrift · outside-in snapshot
