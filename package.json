@@ -7,7 +7,9 @@
     "dev": "vite",
     "dev:lan": "vite --host",
     "tunnel": "npx --yes localtunnel@2.0.2 --port 5173",
-    "build": "tsc -b && vite build",
+    "start": "node dist-server/server.cjs",
+    "build:server": "node scripts/build-server.mjs",
+    "build": "npm run build:server && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run"
@@ -32,6 +34,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "esbuild": "^0.28.0",
     "eslint": "^10.2.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
